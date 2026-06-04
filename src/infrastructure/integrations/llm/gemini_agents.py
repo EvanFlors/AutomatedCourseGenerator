@@ -101,21 +101,22 @@ class GeminiRelationClassificationAgent(RelationClassificationAgent):
 
 
 def _build_concept_prompt(text: str) -> str:
-    return f"""You are a knowledge extractor. Read the text below and list the
-key concepts (terms, ideas, techniques) that a student would need
-to learn. For each concept, give a short description in your own
-words and a confidence score between 0 and 1.
+    return f"""
+                You are a knowledge extractor. Read the text below and list the
+                key concepts (terms, ideas, techniques) that a student would need
+                to learn. For each concept, give a short description in your own
+                words and a confidence score between 0 and 1.
 
-Respond ONLY with a JSON object of the form:
-{{"concepts": [{{"name": "...", "description": "...", "confidence": 0.9}}, ...]}}
+                Respond ONLY with a JSON object of the form:
+                {{"concepts": [{{"name": "...", "description": "...", "confidence": 0.9}}, ...]}}
 
-Do not include any commentary, markdown, or preamble.
+                Do not include any commentary, markdown, or preamble.
 
-TEXT:
-\"\"\"
-{text}
-\"\"\"
-"""
+                TEXT:
+                \"\"\"
+                {text}
+                \"\"\"
+            """
 
 
 def _build_relation_prompt(text: str, concepts: list[ExtractedConcept]) -> str:

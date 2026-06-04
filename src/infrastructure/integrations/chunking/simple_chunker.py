@@ -49,6 +49,7 @@ class SimpleChunker(ChunkingService):
         start = 0
         index = 0
         step = self._chunk_size - self._overlap
+
         while start < len(text):
             end = min(start + self._chunk_size, len(text))
             window = text[start:end]
