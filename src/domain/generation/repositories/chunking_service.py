@@ -2,7 +2,8 @@ from abc import ABC, abstractmethod
 
 
 class TextChunk:
-    """A contiguous slice of a larger text.
+    """
+    A contiguous slice of a larger text.
 
     Chunks are the unit of work for the LLM extraction stages. They
     are designed to fit comfortably in a model context window
@@ -32,7 +33,8 @@ class TextChunk:
 
 
 class ChunkingService(ABC):
-    """Port for splitting long text into smaller chunks.
+    """
+    Port for splitting long text into smaller chunks.
 
     Implementations should be deterministic and overlap-aware so
     that concepts spanning chunk boundaries are not lost.
@@ -40,5 +42,6 @@ class ChunkingService(ABC):
 
     @abstractmethod
     def chunk(self, text: str, source_index: int = 0) -> list[TextChunk]:
-        """Split `text` into overlapping chunks.
+        """
+        Split `text` into overlapping chunks.
         """

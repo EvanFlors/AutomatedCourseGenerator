@@ -1,6 +1,7 @@
-from enum import Enum
+from enum import StrEnum
 
-class BlockType(str, Enum):
+
+class BlockType(StrEnum):
     HEADING = "heading"
     TEXT = "text"
     CODE = "code"

@@ -13,15 +13,10 @@ class ContentBlock:
         payload: dict,
         id: str | None = None,
     ):
-
         self.id = id or str(uuid4())
-
         self.type = block_type
-
         self.order = order
-
         self.payload = payload
-
         self._validate()
 
     def _validate(self):

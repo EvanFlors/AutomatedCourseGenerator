@@ -13,15 +13,10 @@ class Module:
         topics: list[Topic] | None = None,
         id: str | None = None,
     ):
-
         self.id = id or str(uuid4())
-
         self.title = title.strip()
-
         self.order = order
-
         self.topics = topics or []
-
         self._validate()
 
     def _validate(self):

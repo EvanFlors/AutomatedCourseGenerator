@@ -22,7 +22,8 @@ class CourseGenerationJob:
     def __init__(
         self,
         course_id: str,
-        sources: list[CourseSource],
+        sources: list[CourseSource] | None = None,
+        *,
         id: str | None = None,
         status: JobStatus = JobStatus.PENDING,
         created_at: datetime | None = None,
@@ -31,10 +32,14 @@ class CourseGenerationJob:
         concepts_extracted: int = 0,
         relations_extracted: int = 0,
         error_message: str | None = None,
+        generation_request: "GenerationRequest | None" = None,
+        draft: "CourseDraft | None" = None,
+        iteration_count: int = 0,
+        max_iterations: int = 5,
     ):
         self.id = id or str(uuid4())
         self.course_id = course_id
-        self.sources = list(sources)
+        self.sources = list(sources) if sources else []
         self.status = status
         self.created_at = created_at or datetime.utcnow()
         self.started_at = started_at
@@ -42,14 +47,19 @@ class CourseGenerationJob:
         self.concepts_extracted = concepts_extracted
         self.relations_extracted = relations_extracted
         self.error_message = error_message
+        self.generation_request = generation_request
+        self.draft = draft
+        self.iteration_count = iteration_count
+        self.max_iterations = max_iterations
         self._validate()
 
     def _validate(self) -> None:
         if not self.course_id:
             raise ValidationError("CourseGenerationJob course_id cannot be empty.")
-        if not self.sources:
+        if not self.sources and not self.generation_request:
             raise ValidationError(
-                "CourseGenerationJob requires at least one source."
+                "CourseGenerationJob requires at least one source (extraction "
+                "pipeline) or a generation_request (generation pipeline)."
             )
         if not isinstance(self.status, JobStatus):
             raise ValidationError(
@@ -59,6 +69,10 @@ class CourseGenerationJob:
             raise ValidationError(
                 "concepts_extracted and relations_extracted cannot be negative."
             )
+        if self.iteration_count < 0:
+            raise ValidationError("iteration_count cannot be negative.")
+        if self.max_iterations < 1:
+            raise ValidationError("max_iterations must be at least 1.")
 
     def mark_running(self) -> None:
         if self.status is JobStatus.COMPLETED:
@@ -108,6 +122,32 @@ class CourseGenerationJob:
                 f"Cannot add sources to a job in {self.status.name} state."
             )
         self.sources.append(source)
+
+    def mark_evaluating(self) -> None:
+        if self.status is JobStatus.COMPLETED:
+            raise ValidationError("Cannot transition out of COMPLETED.")
+        if self.status is not JobStatus.RUNNING:
+            raise ValidationError(
+                f"Cannot transition from {self.status.name} to EVALUATING; "
+                "job must be RUNNING."
+            )
+        self.status = JobStatus.EVALUATING
+
+    def mark_completed_from_evaluator(self) -> None:
+        if self.status is not JobStatus.EVALUATING:
+            raise ValidationError(
+                f"Cannot mark COMPLETED from {self.status.name}; "
+                "job must be EVALUATING."
+            )
+        self.status = JobStatus.COMPLETED
+        self.completed_at = datetime.utcnow()
+
+    def increment_iteration(self) -> None:
+        self.iteration_count += 1
+        if self.iteration_count > self.max_iterations:
+            raise ValidationError(
+                f"max_iterations ({self.max_iterations}) exceeded."
+            )
 
     @property
     def duration_seconds(self) -> float | None:

@@ -3,7 +3,8 @@ from src.domain.shared.exceptions.validation_error import ValidationError
 
 
 class CourseSource:
-    """A user-provided input to the generation pipeline.
+    """
+    A user-provided input to the generation pipeline.
 
     For TEXT sources, `content` is the raw text already, and `url`
     is None. For URL sources, `url` points to the page to fetch and

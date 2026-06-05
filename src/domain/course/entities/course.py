@@ -13,19 +13,14 @@ class Course:
         modules: list[Module] | None = None,
         id: str | None = None,
     ):
-
         self.id = id or str(uuid4())
-
         self.title = title.strip()
-
+        self.modules = modules or []
         self.description = (
             description.strip()
             if description
             else None
         )
-
-        self.modules = modules or []
-
         self._validate()
 
     def _validate(self):

@@ -10,24 +10,24 @@ class CourseRepository(ABC):
         self,
         course: Course
     ) -> None:
-        pass
+        raise NotImplementedError
 
     @abstractmethod
     async def find_by_id(
         self,
         course_id: str
     ) -> Course | None:
-        pass
+        raise NotImplementedError
 
     @abstractmethod
     async def list_courses(
         self
     ) -> list[Course]:
-        pass
+        raise NotImplementedError
 
     @abstractmethod
     async def delete(
         self,
         course_id: str
     ) -> None:
-        pass
+        raise NotImplementedError
