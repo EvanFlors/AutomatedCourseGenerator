@@ -60,8 +60,7 @@ process. Each NFR is:
 
 ### NFR-PERF-002 — Monitoring view update cadence
 - **Priority:** M
-- **Statement:** The generation monitoring view shall update at least
-  every **2 seconds** during a running job.
+- **Statement:** The generation monitoring view shall update at least every **2 seconds** during a running job.
 - **Verification:** Browser timing trace; assert update interval ≤ 2 s.
 
 ### NFR-PERF-003 — API response time (non-generation)
