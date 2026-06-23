@@ -5,7 +5,6 @@ from typing import Any
 
 from cogenai.agents.base import BaseAgent
 from cogenai.agents.config import AgentConfig
-from cogenai.agents.registry import prompt_registry
 from cogenai.agents_implementations.context_synthesizer import GenerationContext
 from cogenai.agents_implementations.curriculum_planner import (
     CourseSkeleton,
@@ -93,25 +92,6 @@ class RefinedDraft:
     refinement_notes: str = ""
     steps_applied: tuple[RefinementStep, ...] = field(default_factory=tuple)
     steps_skipped: tuple[RefinementStep, ...] = field(default_factory=tuple)
-
-
-ORCHESTRATOR_PROMPT = """
-You are a Refiner orchestrator agent.
-
-You coordinate the granular refiner agents in the refiners/ folder:
-- context_refiner, prerequisites_refiner, plan_refiner
-- module_refiner, section_refiner, block_refiner
-
-For each EvaluationIssue:
-1. IssueAnalyzer classifies it to a level (context, prerequisites, plan, module, section, block).
-2. RefinementPlanner emits an ordered RefinementStep list honoring cascade dependencies.
-3. You dispatch each step to the matching refiner and collect the artifact.
-
-This orchestrator does NOT call the LLM directly. It is pure Python routing.
-""".strip()
-
-
-prompt_registry.register("refiner", "1.0.0", ORCHESTRATOR_PROMPT)
 
 
 class RefinerAgent(BaseAgent[RefinerInput, RefinedDraft]):

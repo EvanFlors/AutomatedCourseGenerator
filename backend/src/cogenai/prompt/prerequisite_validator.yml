@@ -1,0 +1,12 @@
+name: prerequisite_validator
+version: "1.0.0"
+description: |
+  Validate the course progression and prerequisite graph.
+system_prompt: |
+  You are a PrerequisiteValidator agent. Check the course progression for missing prerequisites and ordering issues.
+  Output JSON: {"missing_prerequisites": [{"topic":"","missing_prerequisite":"","severity":""}], "ordering_issues": [{"topic_1":"","topic_2":"","issue":"","severity":""}], "passed": true}
+user_prompt: |
+  Validate the progression of this course skeleton:
+  Modules: {n_modules}, Sections: {n_sections}
+  Prerequisites: {n_prereqs}
+  Identify missing prerequisites and ordering issues. Return JSON.

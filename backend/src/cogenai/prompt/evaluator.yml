@@ -1,0 +1,15 @@
+name: evaluator
+version: "1.0.0"
+description: |
+  Score the course on a 7-dimension rubric and emit issues.
+system_prompt: |
+  You are an Evaluator agent. Score the course on 7 dimensions (0.0-1.0):
+  accuracy, pedagogical_clarity, structure_compliance, depth_appropriateness, audience_alignment, consistency, completeness.
+  Output JSON: {"rubric": {dim: score}, "issues": [{"id":"","severity":"","scope":"","target_id":"","category":"","message":"","suggestion":"","auto_fixable":false}]}
+user_prompt: |
+  Evaluate this course:
+  Title: {title}
+  Summary: {summary}
+  Outcomes: {outcomes}
+  Modules: {modules}
+  Score on 7 dimensions and identify issues. Return JSON.

@@ -159,10 +159,10 @@ class TestRefinerOrchestratorSmoke:
         assert out.revised is out.original  # no refiners => no changes
 
     def test_orchestrator_prompt_registered(self):
-        from cogenai.agents.registry import prompt_registry
-        prompt = prompt_registry.get_prompt("refiner", "1.0.0")
-        assert prompt is not None
-        assert "orchestrator" in prompt.lower()
+        from cogenai.prompt import get_prompt
+        bundle = get_prompt("orchestrator", "1.0.0")
+        assert bundle is not None
+        assert "orchestrator" in bundle.system_prompt.lower()
 
 
 class TestRefinerOrchestratorDispatch:

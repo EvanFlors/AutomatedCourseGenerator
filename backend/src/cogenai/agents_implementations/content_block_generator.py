@@ -4,7 +4,6 @@ from dataclasses import dataclass, field
 
 from cogenai.agents.base import BaseAgent
 from cogenai.agents.config import AgentConfig
-from cogenai.agents.registry import prompt_registry
 from cogenai.agents_implementations.context_synthesizer import GenerationContext
 from cogenai.agents_implementations.curriculum_planner import SectionSpec
 from cogenai.agents_implementations.persona_adapter import AdaptedSection
@@ -27,22 +26,6 @@ class ContentBlockGeneratorInput:
 class GeneratedSectionBlocks:
     section_spec: SectionSpec
     blocks: tuple[ContentBlock, ...] = field(default_factory=tuple)
-
-
-CONTENT_BLOCK_GENERATOR_PROMPT = """
-You are a ContentBlockGenerator agent. Generate detailed, high-quality content blocks for a course section.
-
-Output a JSON array of blocks. Each block has:
-- type: one of concept, example, exercise, key_points, quiz
-- content: object with appropriate fields per type:
-  - concept: {"markdown": "explanation", "key_takeaways": ["point1", "point2"]}
-  - example: {"markdown": "example text", "scenario": "real-world scenario"}
-  - exercise: {"prompt": "task description", "hints": ["hint1", "hint2"]}
-  - key_points: {"items": ["point1", "point2"]}
-  - quiz: {"questions": [{"question": "...", "choices": ["a", "b", "c", "d"], "answer_index": 0, "explanation": "..."}]}
-"""
-
-prompt_registry.register("content_block_generator", "1.0.0", CONTENT_BLOCK_GENERATOR_PROMPT)
 
 
 class ContentBlockGeneratorAgent(BaseAgent[ContentBlockGeneratorInput, GeneratedSectionBlocks]):

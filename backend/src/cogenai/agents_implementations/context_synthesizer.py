@@ -4,7 +4,6 @@ import re
 
 from cogenai.agents.base import BaseAgent
 from cogenai.agents.config import AgentConfig
-from cogenai.agents.registry import prompt_registry
 from cogenai.bootstrap.logging import get_logger
 from cogenai.domain.ports.llm import LLMProvider
 
@@ -33,15 +32,6 @@ class GenerationContext:
     documents: tuple[str, ...] = tuple()
     reference_courses: tuple[str, ...] = tuple()
     domain_knowledge: tuple[str, ...] = tuple()
-
-
-CONTEXT_SYNTHESIZER_PROMPT = """
-You are a ContextSynthesizer agent. Normalize course generation inputs.
-Output JSON object with fields:
-topic, audience, difficulty, learning_outcomes, text_instructions, documents, reference_courses, domain_knowledge.
-"""
-
-prompt_registry.register("context_synthesizer", "1.0.0", CONTEXT_SYNTHESIZER_PROMPT)
 
 
 class ContextSynthesizerAgent(BaseAgent[ContextSynthesizerInput, GenerationContext]):

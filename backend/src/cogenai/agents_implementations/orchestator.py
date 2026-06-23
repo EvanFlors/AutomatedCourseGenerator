@@ -72,37 +72,6 @@ class OrchestratorOutput:
     iterations: int = 0
 
 
-# Register the prompt (minimal - this is the coordinator)
-ORCHESTRATOR_PROMPT = """
-You are an Orchestrator agent.
-
-Your task is to coordinate the multi-agent course generation pipeline.
-
-Pipeline:
-1. ContextSynthesizer → normalize inputs
-2. CurriculumPlanner → create structure
-3. For each section:
-   - SectionAuthor → generate blocks
-   - PersonaAdapter → adapt to audience
-4. ConsistencyChecker → check consistency
-5. PrerequisiteValidator → validate progression
-6. Evaluator → score quality
-7. While not passed and iterations < max:
-   - Refiner → improve content
-   - Evaluator → re-score
-8. Return JSONOutputContract
-
-You are the ONLY agent authorized to write to persistence.
-All other agents are stateless.
-"""
-
-prompt_registry.register(
-    "orchestrator",
-    "1.0.0",
-    ORCHESTRATOR_PROMPT,
-)
-
-
 @dataclass
 class OrchestratorState:
     job_id: str = ""

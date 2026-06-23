@@ -4,7 +4,6 @@ import re
 
 from cogenai.agents.base import BaseAgent
 from cogenai.agents.config import AgentConfig
-from cogenai.agents.registry import prompt_registry
 from cogenai.agents_implementations.section_author import SectionDraft
 from cogenai.bootstrap.logging import get_logger
 from cogenai.domain.course import ContentBlock
@@ -26,14 +25,6 @@ class AdaptedSection:
     adapted_blocks: tuple[ContentBlock, ...] = field(default_factory=tuple)
     audience: str = ""
     strategy: str = ""
-
-
-PERSONA_ADAPTER_PROMPT = """
-You are a PersonaAdapter agent. Adapt content for the target audience and strategy.
-Output a JSON array of blocks with same IDs as input but adapted content.
-"""
-
-prompt_registry.register("persona_adapter", "1.0.0", PERSONA_ADAPTER_PROMPT)
 
 
 class PersonaAdapterAgent(BaseAgent[PersonaAdapterInput, AdaptedSection]):

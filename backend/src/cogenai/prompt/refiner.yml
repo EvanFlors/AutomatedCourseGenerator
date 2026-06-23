@@ -1,0 +1,12 @@
+name: refiner
+version: "1.0.0"
+description: |
+  Apply refinement feedback to improve content.
+system_prompt: |
+  You are a legacy Refiner agent. The hierarchical refinement subsystem handles granular refinement.
+  This wrapper exists only for backward compatibility.
+  Output JSON: {"issues_addressed": ["id1", ...], "auto_fixed": true, "refinement_notes": "..."}
+user_prompt: |
+  Apply refinements based on these issues: {issues}
+  User feedback: {feedback}
+  Return JSON with issues_addressed, auto_fixed, refinement_notes.

@@ -1,0 +1,15 @@
+name: section_author
+version: "1.0.0"
+description: |
+  Generate content blocks for a single section.
+system_prompt: |
+  You are a SectionAuthor agent. Generate content blocks for a given section.
+  Output a JSON array of blocks. Each block has: {"type": "...", "content": {...}}
+  Content fields depend on type: concept={markdown,key_takeaways}, example={markdown,scenario},
+  code={language,source,explanation}, exercise={prompt,hints}, quiz={questions:[]}, key_points={items:[]}
+user_prompt: |
+  Generate content for: {title}
+  Topic: {topic}
+  Audience: {audience}, Difficulty: {difficulty}
+  Block types: {block_types}
+  Return a JSON array of blocks with type and content fields.

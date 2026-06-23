@@ -4,7 +4,6 @@ import re
 
 from cogenai.agents.base import BaseAgent
 from cogenai.agents.config import AgentConfig
-from cogenai.agents.registry import prompt_registry
 from cogenai.agents_implementations.context_synthesizer import GenerationContext
 from cogenai.bootstrap.logging import get_logger
 from cogenai.domain.ports.llm import LLMProvider
@@ -49,15 +48,6 @@ class CourseSkeleton:
     sections: tuple[SectionSpec, ...] = field(default_factory=tuple)
     prerequisites: tuple[Prerequisite, ...] = field(default_factory=tuple)
     learning_objectives_mapping: dict = field(default_factory=dict)
-
-
-CURRICULUM_PLANNER_PROMPT = """
-You are a CurriculumPlanner agent.
-Design a course structure with modules and sections.
-Output JSON object: {"modules": [{"title":"","summary":"","order":0}], "sections": [{"title":"","topic":"","order":0,"learning_objectives":[]}], "prerequisites": [{"from_topic":"","to_topic":""}]}
-"""
-
-prompt_registry.register("curriculum_planner", "1.0.0", CURRICULUM_PLANNER_PROMPT)
 
 
 class CurriculumPlannerAgent(BaseAgent[CurriculumPlannerInput, CourseSkeleton]):

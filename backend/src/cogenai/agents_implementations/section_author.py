@@ -4,7 +4,6 @@ import re
 
 from cogenai.agents.base import BaseAgent
 from cogenai.agents.config import AgentConfig
-from cogenai.agents.registry import prompt_registry
 from cogenai.agents_implementations.context_synthesizer import GenerationContext
 from cogenai.agents_implementations.curriculum_planner import CourseSkeleton, SectionSpec
 from cogenai.bootstrap.logging import get_logger
@@ -28,17 +27,6 @@ class SectionDraft:
     section_spec: SectionSpec
     blocks: tuple[ContentBlock, ...] = field(default_factory=tuple)
     generated_for: str = ""
-
-
-SECTION_AUTHOR_PROMPT = """
-You are a SectionAuthor agent.
-Generate content blocks for the given section.
-Output a JSON array of blocks. Each block has: {"type": "...", "content": {...}}
-Content fields depend on type: concept={markdown,key_takeaways}, example={markdown,scenario},
-code={language,source,explanation}, exercise={prompt,hints}, quiz={questions:[]}, key_points={items:[]}
-"""
-
-prompt_registry.register("section_author", "1.0.0", SECTION_AUTHOR_PROMPT)
 
 
 class SectionAuthorAgent(BaseAgent[SectionAuthorInput, SectionDraft]):

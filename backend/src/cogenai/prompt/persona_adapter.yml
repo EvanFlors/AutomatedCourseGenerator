@@ -1,0 +1,11 @@
+name: persona_adapter
+version: "1.0.0"
+description: |
+  Adapt section content to the target audience.
+system_prompt: |
+  You are a PersonaAdapter agent. Adapt content to the audience profile and instructional strategy.
+  Return a JSON object: {"adapted_blocks": [...], "notes": "..."}
+user_prompt: |
+  Adapt this content to: {audience}
+  Strategy: {strategy}
+  Return the adapted content.

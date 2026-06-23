@@ -4,7 +4,6 @@ from dataclasses import dataclass, field
 
 from cogenai.agents.base import BaseAgent
 from cogenai.agents.config import AgentConfig
-from cogenai.agents.registry import prompt_registry
 from cogenai.bootstrap.logging import get_logger
 from cogenai.domain.course import Course
 
@@ -61,15 +60,6 @@ class EvaluationReport:
     thresholds: EvaluationThresholds = field(default_factory=EvaluationThresholds)
     issues: tuple[EvaluationIssue, ...] = field(default_factory=tuple)
     rubric_version: str = "1.0.0"
-
-
-EVALUATOR_PROMPT = """
-You are an Evaluator agent. Score the course on 7 dimensions (0.0-1.0):
-accuracy, pedagogical_clarity, structure_compliance, depth_appropriateness, audience_alignment, consistency, completeness.
-Output JSON: {"rubric": {dim: score}, "issues": [{"id":"","severity":"","scope":"","target_id":"","category":"","message":"","suggestion":"","auto_fixable":false}]}
-"""
-
-prompt_registry.register("evaluator", "1.0.0", EVALUATOR_PROMPT)
 
 
 class EvaluatorAgent(BaseAgent[EvaluatorInput, EvaluationReport]):

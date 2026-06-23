@@ -4,7 +4,6 @@ import re
 
 from cogenai.agents.base import BaseAgent
 from cogenai.agents.config import AgentConfig
-from cogenai.agents.registry import prompt_registry
 from cogenai.agents_implementations.curriculum_planner import CourseSkeleton
 from cogenai.bootstrap.logging import get_logger
 
@@ -38,14 +37,6 @@ class ProgressionReport:
     missing_prerequisites: tuple[PrerequisiteIssue, ...] = field(default_factory=tuple)
     ordering_issues: tuple[OrderingIssue, ...] = field(default_factory=tuple)
     passed: bool = True
-
-
-PREREQUISITE_VALIDATOR_PROMPT = """
-You are a PrerequisiteValidator agent. Check the course progression for missing prerequisites and ordering issues.
-Output JSON: {"missing_prerequisites": [{"topic":"","missing_prerequisite":"","severity":""}], "ordering_issues": [{"topic_1":"","topic_2":"","issue":"","severity":""}], "passed": true}
-"""
-
-prompt_registry.register("prerequisite_validator", "1.0.0", PREREQUISITE_VALIDATOR_PROMPT)
 
 
 class PrerequisiteValidatorAgent(BaseAgent[PrerequisiteValidatorInput, ProgressionReport]):

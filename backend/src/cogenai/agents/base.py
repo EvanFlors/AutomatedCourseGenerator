@@ -6,6 +6,7 @@ from cogenai.agents.registry import prompt_registry
 from cogenai.bootstrap.logging import get_logger
 from cogenai.domain.ports.llm import LLMProvider
 from cogenai.domain.value_objects.llm import CompletionRequest
+from cogenai.prompt import get_prompt as yaml_get_prompt
 
 logger = get_logger(__name__)
 
@@ -20,10 +21,15 @@ class BaseAgent(Generic[Input, Output]):
     llm_provider: LLMProvider
 
     def _get_prompt(self, version: str = "1.0.0") -> str:
-        prompt = prompt_registry.get_prompt(self.name, version)
-        if prompt is None:
-            raise ValueError(f"No prompt registered for {self.name} version {version}")
-        return prompt
+        bundle = yaml_get_prompt(self.name, version)
+        if bundle is not None:
+            return bundle.system_prompt
+
+        legacy = prompt_registry.get_prompt(self.name, version)
+        if legacy is None:
+            raise ValueError(f"No legacy prompt registered for {self.name} version {version}")
+
+        return legacy
 
     def _call_llm(
         self,

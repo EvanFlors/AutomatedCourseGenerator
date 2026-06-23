@@ -299,7 +299,21 @@ def build_course(
             context,
             modules=tuple(modules),
         )
-        course.generation_iteration = generation_iteration
+        course = Course(
+            id=course.id,
+            title=course.title,
+            summary=course.summary,
+            language=course.language,
+            audience=course.audience,
+            difficulty=course.difficulty,
+            learning_outcomes=course.learning_outcomes,
+            modules=course.modules,
+            estimated_duration_minutes=course.estimated_duration_minutes,
+            tags=course.tags,
+            version=course.version,
+            generation_iteration=generation_iteration,
+            source_topic=course.source_topic,
+        )
     else:
         course = Course(
             title=f"{request['topic']} for {request['audience']}",
@@ -309,9 +323,9 @@ def build_course(
             ),
             learning_outcomes=tuple(request["learning_outcomes"]),
             modules=tuple(modules),
+            generation_iteration=generation_iteration,
+            source_topic=str(request.get("topic", "")),
         )
-        course.generation_iteration = generation_iteration
-        course.source_topic = str(request.get("topic", ""))
 
     course_id = course.id
     modules_with_parent = tuple(
@@ -329,6 +343,8 @@ def build_course(
         )
         for m in course.modules
     )
+    if not modules_with_parent or all(m.parent_course_id == course_id for m in modules_with_parent):
+        return course.with_modules(modules_with_parent, course.version)
     return course.with_modules(modules_with_parent, course.version)
 
 
@@ -420,7 +436,7 @@ def auto_feedback_decision(
     return request
 
 
-def print_iteration_summary(result: IterationResult) -> None:
+def print_iteration_summary(result: IterationResult, verbose: bool = False) -> None:
     print(f"\n{'=' * 50}")
     print(f"Iteration {result.iteration} Results:")
     print(f"  Score:           {result.evaluation_score:.2f}  (passed: {result.evaluation_passed})")
@@ -428,14 +444,15 @@ def print_iteration_summary(result: IterationResult) -> None:
     print(f"  Prerequisites:   {result.prerequisites_passed}")
     print(f"  Course version:  {result.course.version}")
     print(f"  Gen iteration:   {result.course.generation_iteration}")
-    print(f"  Source topic:    {result.course.source_topic}")
     print(f"  Title:           {result.course.title}")
-    print(f"  Summary:         {result.course.summary[:80]}")
-    if result.course.audience:
-        print(f"  Audience:        {result.course.audience.profile}")
-    if result.course.difficulty:
-        print(f"  Difficulty:      {result.course.difficulty.level}")
-    print(f"  Outcomes:        {', '.join(result.course.learning_outcomes)}")
+    if verbose:
+        print(f"  Source topic:    {result.course.source_topic}")
+        print(f"  Summary:         {result.course.summary[:80]}")
+        if result.course.audience:
+            print(f"  Audience:        {result.course.audience.profile}")
+        if result.course.difficulty:
+            print(f"  Difficulty:      {result.course.difficulty.level}")
+        print(f"  Outcomes:        {', '.join(result.course.learning_outcomes)}")
     print(f"  Modules:         {len(result.course.modules)}")
     total_sections = sum(len(m.sections) for m in result.course.modules)
     total_blocks = sum(
@@ -458,8 +475,9 @@ def run_demo(
     request: dict[str, Any],
     *,
     auto: bool = False,
+    verbose: bool = False,
     max_iterations: int | None = None,
-) -> Course:
+) -> tuple[Course, Any, int]:
     configure_logging()
     llm_provider = get_llm_provider()
 
@@ -484,16 +502,28 @@ def run_demo(
     prev_result: IterationResult | None = None
     feedback_text = ""
     feedback_level = "module"
+    working_bundle: CourseBundle | None = None
 
     while iteration < max_iter:
         iteration += 1
         logger.info(f"Iteration {iteration}/{max_iter}")
 
-        context, skeleton = generate_skeleton(
-            request, config, llm_provider,
-            feedback=feedback_text,
-            prev_issues=prev_result.issues if prev_result else (),
-        )
+        if working_bundle is not None:
+            context = working_bundle.context
+            skeleton = working_bundle.plan
+            if prev_result and not prev_result.evaluation_passed:
+                logger.info("Re-running heavy LLM agents because issues remain")
+                context, skeleton = generate_skeleton(
+                    request, config, llm_provider,
+                    feedback=feedback_text,
+                    prev_issues=prev_result.issues if prev_result else (),
+                )
+        else:
+            context, skeleton = generate_skeleton(
+                request, config, llm_provider,
+                feedback=feedback_text,
+                prev_issues=prev_result.issues if prev_result else (),
+            )
         prereq_report = validate_prerequisites(skeleton, config, llm_provider)
         all_sections = generate_sections(context, skeleton, request, config, llm_provider)
         course = build_course(
@@ -518,12 +548,12 @@ def run_demo(
             issues=report.issues,
             user_feedback=feedback_text,
         )
-        print_iteration_summary(result)
+        print_iteration_summary(result, verbose=verbose)
 
         if report.passed and consistency.passed and prereq_report.passed:
             logger.info("Course passed all checks!")
-            print_final_course(course, report, iteration)
-            return course
+            print_final_course(course, report, iteration, verbose=verbose)
+            return course, report, iteration
 
         if iteration >= max_iter:
             break
@@ -554,13 +584,24 @@ def run_demo(
             f"skipped={len(refined.steps_skipped)}, "
             f"notes={refined.refinement_notes}"
         )
+
+        if isinstance(refined.revised, CourseBundle):
+            working_bundle = refined.revised
+        else:
+            working_bundle = CourseBundle(
+                course=refined.revised,
+                context=context,
+                plan=skeleton,
+                prerequisites=tuple(skeleton.prerequisites),
+            )
+
         prev_result = result
 
-    print_final_course(course, report, iteration)
-    return course
+    print_final_course(course, report, iteration, verbose=verbose)
+    return course, report, iteration
 
 
-def print_final_course(course: Course, report, iteration: int) -> None:
+def print_final_course(course: Course, report, iteration: int, verbose: bool = False) -> None:
     print(f"\n{'=' * 50}")
     print("FINAL COURSE")
     print("=" * 50)
@@ -581,19 +622,74 @@ def print_final_course(course: Course, report, iteration: int) -> None:
             f"  - {module.title}  [idx={module.module_index}, "
             f"sections={module.sections_count}, blocks={module.blocks_count}]"
         )
-        for section in module.sections:
-            print(
-                f"      * {section.title}  [idx={section.section_index}, "
-                f"blocks={section.blocks_count}, parent_module={section.parent_module_id}]"
-            )
-            for block in section.blocks:
+        if verbose:
+            for section in module.sections:
                 print(
-                    f"        - {block.type}  [idx={block.block_index}, "
-                    f"parent_section={block.parent_section_id}, "
-                    f"parent_module={block.parent_module_id}]"
+                    f"      * {section.title}  [idx={section.section_index}, "
+                    f"blocks={section.blocks_count}, parent_module={section.parent_module_id}]"
                 )
+                for block in section.blocks:
+                    print(
+                        f"        - {block.type}  [idx={block.block_index}, "
+                        f"parent_section={block.parent_section_id}, "
+                        f"parent_module={block.parent_module_id}]"
+                    )
     print(f"\nFinal score:  {report.overall_score:.2f}  (passed: {report.passed})")
     print(f"Iterations:   {iteration}")
+
+
+def _course_to_dict(course: Course, report, iteration: int) -> dict:
+    return {
+        "schema_version": "1.0.0",
+        "title": course.title,
+        "summary": course.summary,
+        "audience": course.audience.profile if course.audience else None,
+        "difficulty": course.difficulty.level if course.difficulty else None,
+        "learning_outcomes": list(course.learning_outcomes),
+        "source_topic": course.source_topic,
+        "course_version": course.version,
+        "generation_iteration": course.generation_iteration,
+        "modules": [
+            {
+                "id": str(m.id),
+                "title": m.title,
+                "order": m.order,
+                "module_index": m.module_index,
+                "sections_count": m.sections_count,
+                "blocks_count": m.blocks_count,
+                "sections": [
+                    {
+                        "id": str(s.id),
+                        "title": s.title,
+                        "order": s.order,
+                        "section_index": s.section_index,
+                        "blocks_count": s.blocks_count,
+                        "parent_module_id": str(s.parent_module_id) if s.parent_module_id else None,
+                        "learning_objectives": list(s.learning_objectives),
+                        "blocks": [
+                            {
+                                "id": str(b.id),
+                                "type": b.type,
+                                "order": b.order,
+                                "block_index": b.block_index,
+                                "parent_section_id": str(b.parent_section_id) if b.parent_section_id else None,
+                                "parent_module_id": str(b.parent_module_id) if b.parent_module_id else None,
+                                "content": b.content,
+                            }
+                            for b in s.blocks
+                        ],
+                    }
+                    for s in m.sections
+                ],
+            }
+            for m in course.modules
+        ],
+        "evaluation": {
+            "overall_score": report.overall_score,
+            "passed": report.passed,
+        },
+        "iterations": iteration,
+    }
 
 
 # ----------------------------------------------- #
@@ -643,6 +739,14 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         "--max-blocks-per-section", type=int, default=None,
         help="Hard cap on blocks per section (overrides LLM output)",
     )
+    parser.add_argument(
+        "--verbose", action="store_true",
+        help="Print full per-block metadata for every module/section/block",
+    )
+    parser.add_argument(
+        "--json", action="store_true",
+        help="Emit the final course as a single-line JSON object",
+    )
     return parser.parse_args(argv)
 
 
@@ -662,7 +766,10 @@ def main(argv: list[str] | None = None) -> int:
         "max_iterations": args.iterations,
     })
 
-    run_demo(request, auto=args.auto)
+    course, report, iteration = run_demo(request, auto=args.auto, verbose=args.verbose)
+    if args.json:
+        import json as _json
+        print(_json.dumps(_course_to_dict(course, report, iteration)))
     return 0
 
 

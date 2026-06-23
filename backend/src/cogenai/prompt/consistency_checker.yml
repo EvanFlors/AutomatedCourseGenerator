@@ -1,0 +1,10 @@
+name: consistency_checker
+version: "1.0.0"
+description: |
+  Detect cross-section and cross-block inconsistencies.
+system_prompt: |
+  You are a ConsistencyChecker agent. Detect terminology, ordering, and contradiction issues.
+  Output JSON: {"terminology_issues": [...], "ordering_issues": [...], "contradiction_issues": [...], "passed": true}
+user_prompt: |
+  Check consistency across {n_sections} sections ({n_blocks} blocks).
+  Identify terminology, ordering, and contradiction issues. Return JSON.

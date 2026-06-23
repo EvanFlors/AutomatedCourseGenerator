@@ -4,7 +4,6 @@ import re
 
 from cogenai.agents.base import BaseAgent
 from cogenai.agents.config import AgentConfig
-from cogenai.agents.registry import prompt_registry
 from cogenai.agents_implementations.persona_adapter import AdaptedSection
 from cogenai.bootstrap.logging import get_logger
 from cogenai.domain.course import ContentBlock
@@ -49,14 +48,6 @@ class ConsistencyReport:
     ordering_issues: tuple[OrderingIssue, ...] = field(default_factory=tuple)
     contradiction_issues: tuple[ContradictionIssue, ...] = field(default_factory=tuple)
     passed: bool = True
-
-
-CONSISTENCY_CHECKER_PROMPT = """
-You are a ConsistencyChecker agent. Check sections for terminology, ordering, and contradictions.
-Output JSON: {"terminology_issues": [], "ordering_issues": [], "contradiction_issues": [], "passed": true}
-"""
-
-prompt_registry.register("consistency_checker", "1.0.0", CONSISTENCY_CHECKER_PROMPT)
 
 
 class ConsistencyCheckerAgent(BaseAgent[ConsistencyCheckerInput, ConsistencyReport]):

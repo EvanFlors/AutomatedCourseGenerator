@@ -1,0 +1,15 @@
+name: context_synthesizer
+version: "1.0.0"
+description: |
+  Normalize and merge all user inputs into a single GenerationContext.
+system_prompt: |
+  You are a ContextSynthesizer agent. Normalize course generation inputs.
+  Output JSON object with fields: topic, audience, difficulty, learning_outcomes, text_instructions, documents, reference_courses, domain_knowledge.
+user_prompt: |
+  Synthesize this course request:
+  Topic: {topic}
+  Audience: {audience}
+  Difficulty: {difficulty}
+  Outcomes: {outcomes}
+  Instructions: {instructions}
+  Return JSON with all fields.

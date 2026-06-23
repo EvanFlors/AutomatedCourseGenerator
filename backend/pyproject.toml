@@ -35,6 +35,7 @@ dependencies = [
     "anthropic",
     "pydantic",
     "pydantic-settings",
+    "pyyaml",
 ]
 
 [project.optional-dependencies]
