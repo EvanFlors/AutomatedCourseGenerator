@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import TYPE_CHECKING
 
-from domain.shared.value_objects import (
+from cogenai.domain.shared.value_objects import (
     CourseId,
     ModuleId,
     SectionId,
@@ -19,12 +20,37 @@ from domain.shared.value_objects import (
     InstructionStrategy
 )
 
+if TYPE_CHECKING:
+    from cogenai.agents_implementations.context_synthesizer import GenerationContext
+
 BLOCK_TYPES = frozenset({
     "concept", "example", "code", "exercise", "solution",
     "challenge", "quiz", "key_points", "best_practices",
     "common_mistakes", "visual_explanation", "analogy",
     "reference",
 })
+
+
+_AUDIENCE_ENUM = {"beginner", "professional", "engineer", "architect", "manager", "researcher", "student"}
+_DIFFICULTY_ENUM = {"beginner", "intermediate", "advanced", "expert"}
+
+
+def _build_audience(profile: str | None) -> Audience | None:
+    if not profile:
+        return None
+    try:
+        return Audience(profile=profile)
+    except ValueError:
+        return None
+
+
+def _build_difficulty(level: str | None) -> Difficulty | None:
+    if not level:
+        return None
+    try:
+        return Difficulty(level=level)
+    except ValueError:
+        return None
 
 @dataclass(frozen=True)
 class ContentBlock:
@@ -36,6 +62,9 @@ class ContentBlock:
     difficulty: str = "beginner"
     created_at: datetime = field(default_factory=datetime.utcnow)
     version: int = 1
+    parent_section_id: SectionId | None = None
+    parent_module_id: ModuleId | None = None
+    block_index: int = 0
 
     def __post_init__(self):
         if self.type not in BLOCK_TYPES:
@@ -53,6 +82,9 @@ class ContentBlock:
             difficulty=self.difficulty,
             created_at=self.created_at,
             version=new_version,
+            parent_section_id=self.parent_section_id,
+            parent_module_id=self.parent_module_id,
+            block_index=self.block_index,
         )
 
 @dataclass(frozen=True)
@@ -65,6 +97,9 @@ class Section:
     learning_objectives: list[str] = field(default_factory=list)
     created_at: datetime = field(default_factory=datetime.utcnow)
     version: int = 1
+    parent_module_id: ModuleId | None = None
+    section_index: int = 0
+    blocks_count: int = 0
 
     def __post_init__(self):
         if not self.title:
@@ -79,10 +114,13 @@ class Section:
             id=self.id,
             title=self.title,
             order=self.order,
-            blocks=blocks,
+            blocks=tuple(blocks),
             learning_objectives=self.learning_objectives,
             created_at=self.created_at,
             version=new_version,
+            parent_module_id=self.parent_module_id,
+            section_index=self.section_index,
+            blocks_count=len(blocks),
         )
 
 @dataclass(frozen=True)
@@ -94,6 +132,10 @@ class Module:
     sections: tuple[Section, ...] = field(default_factory=tuple)
     created_at: datetime = field(default_factory=datetime.utcnow)
     version: int = 1
+    parent_course_id: CourseId | None = None
+    module_index: int = 0
+    sections_count: int = 0
+    blocks_count: int = 0
 
     def __post_init__(self):
         if not self.title:
@@ -101,7 +143,7 @@ class Module:
         if self.order < 0:
             raise ValueError("Order must be non-negative")
 
-    def with_sections(self, sections: tuple[Section, ...], new_version: int) -> "Module":
+    def with_sections(self, sections: tuple[Section, ...], new_version: int) -> Module:
         return Module(
             id=self.id,
             title=self.title,
@@ -110,6 +152,10 @@ class Module:
             sections=sections,
             created_at=self.created_at,
             version=new_version,
+            parent_course_id=self.parent_course_id,
+            module_index=self.module_index,
+            sections_count=len(sections),
+            blocks_count=sum(len(s.blocks) for s in sections),
         )
 
 @dataclass(frozen=True)
@@ -127,6 +173,8 @@ class Course:
     created_at: datetime = field(default_factory=datetime.utcnow)
     updated_at: datetime = field(default_factory=datetime.utcnow)
     version: int = 1
+    generation_iteration: int = 0
+    source_topic: str = ""
 
     def __post_init__(self):
         if not self.title:
@@ -136,7 +184,17 @@ class Course:
         if self.language not in {"en", "es", "fr", "de", "ja", "zh"}:
             raise ValueError(f"Unsupported language: {self.language}")
 
-    def with_modules(self, modules: tuple[Module, ...], new_version: int) -> "Course":
+    def total_blocks(self) -> int:
+        return sum(
+            len(section.blocks)
+            for module in self.modules
+            for section in module.sections
+        )
+
+    def total_sections(self) -> int:
+        return sum(len(module.sections) for module in self.modules)
+
+    def with_modules(self, modules: tuple[Module, ...], new_version: int) -> Course:
         return Course(
             id=self.id,
             title=self.title,
@@ -151,6 +209,50 @@ class Course:
             created_at=self.created_at,
             updated_at=datetime.now(),
             version=new_version,
+            generation_iteration=self.generation_iteration,
+            source_topic=self.source_topic,
+        )
+
+    @classmethod
+    def from_context(
+        cls,
+        context: "GenerationContext",
+        modules: tuple[Module, ...] = (),
+        *,
+        title_template: str = "{topic} for {audience}",
+        summary_template: str = "A {difficulty} course on {topic} for {audience}, covering {outcomes}",
+        estimated_duration_minutes: int = 0,
+        tags: tuple[str, ...] = (),
+        language: str = "en",
+    ) -> "Course":
+        """Build a Course with metadata derived from a GenerationContext.
+
+        Used by the orchestrator to keep Course.title/summary/audience/difficulty/
+        learning_outcomes in sync when the context is refined.
+        """
+        outcomes = list(context.learning_outcomes) or [context.topic]
+        outcomes_text = ", ".join(outcomes) if outcomes else context.topic
+        audience = _build_audience(context.audience)
+        difficulty = _build_difficulty(context.difficulty)
+        return cls(
+            title=title_template.format(
+                topic=context.topic,
+                audience=context.audience,
+            ),
+            summary=summary_template.format(
+                difficulty=context.difficulty,
+                topic=context.topic,
+                audience=context.audience,
+                outcomes=outcomes_text,
+            ),
+            language=language,
+            audience=audience,
+            difficulty=difficulty,
+            learning_outcomes=tuple(outcomes),
+            modules=tuple(modules),
+            estimated_duration_minutes=estimated_duration_minutes,
+            tags=tags,
+            source_topic=context.topic,
         )
 
     def total_blocks(self) -> int:

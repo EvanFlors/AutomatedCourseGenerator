@@ -1,16 +1,15 @@
+from collections.abc import Callable
 from functools import lru_cache
 from typing import TypeVar
-from collections.abc import Callable
 
+# from cogenai.infrastructure.llm.anthropic import AnthropicAdapter
+from cogenai.bootstrap.settings import settings
 from cogenai.domain.ports.llm import LLMProvider
 from cogenai.domain.value_objects.llm import Model
 from cogenai.infrastructure.llm.base import BaseLLMAdapter
-from cogenai.infrastructure.llm.stub import StubAdapter
 from cogenai.infrastructure.llm.gemini import GeminiAdapter
 from cogenai.infrastructure.llm.openai import OpenAIAdapter
-# from cogenai.infrastructure.llm.anthropic import AnthropicAdapter
-
-from cogenai.bootstrap.settings import settings
+from cogenai.infrastructure.llm.stub import StubAdapter
 
 T = TypeVar("T", bound=LLMProvider)
 
@@ -34,20 +33,22 @@ _container = Container()
 
 def get_llm_provider() -> LLMProvider:
 
-    model = Model(
-        name=settings.model,
-        temperature=settings.default_temperature,
-        max_tokens=settings.default_max_tokens,
-    )
-
     if settings.llm_provider == "openai":
         if not settings.openai_api_key:
             raise ValueError("OPENAI_API_KEY not set")
         return OpenAIAdapter(api_key=settings.openai_api_key)
     elif settings.llm_provider == "gemini":
-        if not settings.google_api_key:
-            raise ValueError("GOOGLE_API_KEY not set")
-        return GeminiAdapter(api_key=settings.google_api_key)
+        if settings.gemini_use_credentials:
+            # Use Google Cloud credentials
+            return GeminiAdapter(
+                use_credentials=True,
+                location=settings.gemini_location,
+            )
+        else:
+            # Use API key
+            if not settings.google_api_key:
+                raise ValueError("GOOGLE_API_KEY not set")
+            return GeminiAdapter(api_key=settings.google_api_key)
     elif settings.llm_provider == "stub":
         return StubAdapter(response_text="This is a stub response.")
     else:

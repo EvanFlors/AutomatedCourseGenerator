@@ -31,10 +31,11 @@ class Audience:
 
     def __post_init__(self):
         valid = {"beginner", "professional", "engineer", "architect", "manager", "researcher", "student"}
-        self.profile = self.profile.lower()
-
-        if self.profile not in valid:
+        normalized = self.profile.lower()
+        if normalized not in valid:
             raise ValueError(f"Invalid audience profile: {self.profile}. Must be one of {valid}.")
+        object.__setattr__(self, "profile", normalized)
+
 
 @dataclass(frozen=True)
 class Difficulty:
@@ -42,10 +43,10 @@ class Difficulty:
 
     def __post_init__(self):
         valid = {"beginner", "intermediate", "advanced", "expert"}
-        self.level = self.level.lower()
-
-        if self.level not in valid:
+        normalized = self.level.lower()
+        if normalized not in valid:
             raise ValueError(f"Invalid difficulty level: {self.level}. Must be one of {valid}.")
+        object.__setattr__(self, "level", normalized)
 
 @dataclass(frozen=True)
 class InstructionStrategy:

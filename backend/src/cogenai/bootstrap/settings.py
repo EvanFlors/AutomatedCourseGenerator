@@ -24,10 +24,16 @@ class Settings(BaseSettings):
     llm_provider: str = Field(default="stub", description="The LLM provider to use (e.g., 'gemini', 'openai', 'anthropic').")
     openai_api_key: str = Field(default="", description="The API key for OpenAI.")
     anthro_api_key: str = Field(default="", description="The API key for Anthropic.")
-    gemini_api_key: str = Field(default="", description="The API key for Gemini.")
+    google_api_key: str = Field(default="", description="The API key for Google/Gemini.")
+
+    # Gemini credentials settings
+    gemini_use_credentials: bool = Field(default=False, description="Use Google Cloud credentials instead of API key.")
+    gemini_location: str = Field(default="us-central1", description="The Google Cloud location for Vertex AI.")
+    gemini_scope: str = Field(default="https://www.googleapis.com/auth/cloud-platform", description="The Google Cloud scope.")
+
     model: str = Field(default="", description="The model to use for the LLM.")
     default_temperature: float = Field(default=0.7, description="The default temperature for the LLM.")
-    default_max_tokens: int = Field(default=2048, description="The default maximum number of tokens for the LLM.")
+    default_max_tokens: int = Field(default=None, description="The default maximum number of tokens for the LLM.")
 
     # Generation settings
     max_iterations: int = Field(default=3, description="The maximum number of iterations for the generation process.")

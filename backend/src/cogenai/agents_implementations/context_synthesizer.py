@@ -1,13 +1,16 @@
 from dataclasses import dataclass
+import json
+import re
 
 from cogenai.agents.base import BaseAgent
 from cogenai.agents.config import AgentConfig
 from cogenai.agents.registry import prompt_registry
+from cogenai.bootstrap.logging import get_logger
 from cogenai.domain.ports.llm import LLMProvider
-from cogenai.domain.value_objects.llm import CompletionRequest, CompletionResponse
+
+logger = get_logger(__name__)
 
 
-# Define the input type
 @dataclass
 class ContextSynthesizerInput:
     topic: str
@@ -20,7 +23,6 @@ class ContextSynthesizerInput:
     domain_knowledge: tuple[str, ...] = tuple()
 
 
-# Define the output type
 @dataclass
 class GenerationContext:
     topic: str
@@ -33,56 +35,58 @@ class GenerationContext:
     domain_knowledge: tuple[str, ...] = tuple()
 
 
-# Register the prompt
 CONTEXT_SYNTHESIZER_PROMPT = """
-You are a ContextSynthesizer agent.
-
-Your task is to normalize and merge all user inputs into a single GenerationContext.
-
-Input fields:
-- topic: The course topic
-- audience: Target audience (beginner, professional, engineer, architect, manager, researcher, student)
-- difficulty: Difficulty level (beginner, intermediate, advanced, expert)
-- learning_outcomes: Measurable learning outcomes
-- text_instructions: Free-form instructions
-- documents: Reference documents
-- reference_courses: Reference course structures
-- domain_knowledge: Domain-specific knowledge
-
-Output:
-Return a normalized GenerationContext with all fields properly filled.
-
-Be thorough - include all relevant information from the inputs.
+You are a ContextSynthesizer agent. Normalize course generation inputs.
+Output JSON object with fields:
+topic, audience, difficulty, learning_outcomes, text_instructions, documents, reference_courses, domain_knowledge.
 """
 
-prompt_registry.register(
-    "context_synthesizer",
-    "1.0.0",
-    CONTEXT_SYNTHESIZER_PROMPT,
-)
+prompt_registry.register("context_synthesizer", "1.0.0", CONTEXT_SYNTHESIZER_PROMPT)
 
-class ContextSynthesizerAgent(
-    BaseAgent[ContextSynthesizerInput, GenerationContext]
-):
+
+class ContextSynthesizerAgent(BaseAgent[ContextSynthesizerInput, GenerationContext]):
 
     def __init__(self, config: AgentConfig, llm_provider: LLMProvider):
-        super().__init__(
-            name="context_synthesizer",
-            config=config,
-            llm_provider=llm_provider,
-        )
+        super().__init__(name="context_synthesizer", config=config, llm_provider=llm_provider)
 
     def run(self, input_data: ContextSynthesizerInput) -> GenerationContext:
-        context = GenerationContext(
-            topic=input_data.topic,
-            audience=input_data.audience or "beginner",
-            difficulty=input_data.difficulty or "beginner",
-            learning_outcomes=input_data.learning_outcomes,
-            text_instructions=input_data.text_instructions,
-            documents=input_data.documents,
-            reference_courses=input_data.reference_courses,
-            domain_knowledge=input_data.domain_knowledge,
-        )
+        user_prompt = f"""
+            Synthesize this course request:
+            Topic: {input_data.topic}
+            Audience: {input_data.audience or 'beginner'}
+            Difficulty: {input_data.difficulty or 'beginner'}
+            Outcomes: {', '.join(input_data.learning_outcomes)}
+            Instructions: {input_data.text_instructions}
+            Return JSON with all fields.
+        """
+
+        response_text = self._call_llm(user_prompt, self._get_prompt())
+        context = self._parse_context(response_text, input_data)
 
         self._log_execution(input_data, context)
         return context
+
+    def _parse_context(self, response: str, input_data: ContextSynthesizerInput) -> GenerationContext:
+        match = re.search(r'\{.*\}', response, re.DOTALL)
+        if not match:
+            raise ValueError(f"No JSON object found in LLM response for {self.name}")
+
+        data = json.loads(match.group())
+
+        def to_tuple(value):
+            if value is None:
+                return input_data.learning_outcomes if not value else tuple()
+            if isinstance(value, list):
+                return tuple(value)
+            return tuple([value])
+
+        return GenerationContext(
+            topic=data.get("topic", input_data.topic),
+            audience=data.get("audience", input_data.audience or "beginner"),
+            difficulty=data.get("difficulty", input_data.difficulty or "beginner"),
+            learning_outcomes=to_tuple(data.get("learning_outcomes")) or input_data.learning_outcomes,
+            text_instructions=data.get("text_instructions", input_data.text_instructions) or input_data.text_instructions,
+            documents=to_tuple(data.get("documents", input_data.documents)),
+            reference_courses=to_tuple(data.get("reference_courses", input_data.reference_courses)),
+            domain_knowledge=to_tuple(data.get("domain_knowledge", input_data.domain_knowledge)),
+        )

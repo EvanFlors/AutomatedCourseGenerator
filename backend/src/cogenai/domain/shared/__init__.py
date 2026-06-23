@@ -1,4 +1,4 @@
-from value_objects import (
+from cogenai.domain.shared.value_objects import (
     Audience,
     BlockId,
     CourseId,

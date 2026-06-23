@@ -4,8 +4,8 @@ from pydantic import BaseModel, Field
 
 
 class AudienceDTO(BaseModel):
-    profile: str = Field(..., description="A brief description of the target audience for the course.")
-    prerequisites: list[str] = Field(..., description="A list of prerequisites for the course.")
+    profile: str = Field(default="beginner", description="A brief description of the target audience for the course.")
+    prerequisites: list[str] = Field(default_factory=list, description="A list of prerequisites for the course.")
 
 
 class BlockContentDTO(BaseModel):

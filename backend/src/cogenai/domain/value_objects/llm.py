@@ -7,7 +7,7 @@ from dataclasses import dataclass
 class Model:
     name: str
     temperature: float = 0.7
-    max_tokens: int = 2048
+    max_tokens: int | None = None
     top_p: float | None = None
 
     def __post_init__(self):
@@ -15,7 +15,7 @@ class Model:
             raise ValueError("Model name cannot be empty.")
         if not (0.0 <= self.temperature <= 1.0):
             raise ValueError("Temperature must be between 0 and 1.")
-        if self.max_tokens <= 0:
+        if self.max_tokens is not None and self.max_tokens <= 0:
             raise ValueError("Max tokens must be a positive integer.")
         if self.top_p is not None and not (0.0 <= self.top_p <= 1.0):
             raise ValueError("Top_p must be between 0 and 1 if provided.")

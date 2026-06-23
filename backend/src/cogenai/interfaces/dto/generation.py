@@ -4,8 +4,8 @@ from pydantic import BaseModel, Field
 
 
 class AgentTraceEntryDTO(BaseModel):
-    agent: str = Field(..., description="The name of the agent that produced this trace entry.")
-    phase: str = Field(..., description="The phase of the agent's work (draft, evaluate, refine, finalize).")
+    agent: str = Field(default="", description="The name of the agent that produced this trace entry.")
+    phase: str = Field(default="", description="The phase of the agent's work (draft, evaluate, refine, finalize).")
     iteration: int = 0
     started_at: str = ""
     completed_at: str = ""
@@ -26,9 +26,9 @@ class TokenUsageDTO(BaseModel):
 
 
 class GenerationMetadataDTO(BaseModel):
-    job_id: str
-    provider: str = ""
-    model: str = ""
+    job_id: str = Field(default="", description="A unique identifier for the job.")
+    provider: str = Field(default="", description="The LLM provider used.")
+    model: str = Field(default="", description="The model used.")
     prompt_version: str = "1.0.0"
     rubric_version: str = "1.0.0"
     started_at: str = ""

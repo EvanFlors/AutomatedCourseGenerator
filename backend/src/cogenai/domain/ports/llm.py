@@ -10,3 +10,6 @@ class LLMProvider(Protocol):
 
     def complete(self, request: CompletionRequest) -> CompletionResponse:
         ...
+
+    def health_check(self) -> CompletionResponse:
+        ...

@@ -2,54 +2,97 @@ import os
 
 from cogenai.domain.value_objects.llm import CompletionRequest, CompletionResponse, CompletionUsage
 from cogenai.infrastructure.llm.base import BaseLLMAdapter
+from cogenai.infrastructure.llm.factory import LLMClientFactory
 
 
 class GeminiAdapter(BaseLLMAdapter):
 
-    def __init__(self,
-        api_key: str | None = None,
-        use_credentials: bool = False,
-        location: str | None = None,
-        scope: str | None = None
+    _client = None
+    JSON_MIME_TYPE = "application/json"
+
+    def __init__(
+        self,
+        **kwargs
     ):
-        self._api_key = api_key or os.getenv("GOOGLE_API_KEY")
-        self._use_credentials = use_credentials
-        self._location = location
-        self._scope = scope
+        self._load_dependencies()
+        self.client = LLMClientFactory.gemini(**kwargs)
 
-        if not self._use_credentials and not self._api_key:
-            raise ValueError("Google API key must be provided")
+    def _call_provider(
+        self,
+        request: CompletionRequest,
+    ) -> CompletionResponse:
 
-    def _call_provider(self, request: CompletionRequest) -> CompletionResponse:
+        response = self.client.models.generate_content(
+            model=request.model.name,
+            contents=self._build_contents(request),
+            config=self._build_generation_config(request),
+        )
+
+        return CompletionResponse(
+            text=response.text or "",
+            model=request.model,
+            usage=self._build_usage(response),
+            finish_reason="stop",
+        )
+
+    def health_check(self) -> bool:
+        try:
+            next(iter(self.client.models.list()))
+            return True
+        except Exception:
+            return False
+
+    def _load_dependencies(self):
         try:
             from google import genai
             from google.auth import default
             from google.genai.types import Content, Part
-        except ImportError:
-            raise ImportError("Google GenAI library is not installed. Please install it with 'pip install google-genai'")  # noqa: B904
 
-        if self._use_credentials:
-            if not self._scope:
-                raise ValueError("Google API scope must be provided when using credentials")
-            if not self._location:
-                raise ValueError("Google API location must be provided when using credentials")
-            credentials, project_id = default()
-            client = genai.Client(
-                vertexai=True,
-                project=project_id,
-                location=self._location,
-                credentials=credentials,
-            )
-        else:
-            client = genai.Client(self._api_key)
+            self._genai = genai
+            self._google_default = default
+            self._Content = Content
+            self._Part = Part
 
-        contents: list[Content] = []
+        except ImportError as exc:
+            raise ImportError(
+                "Install google-genai: pip install google-genai"
+            ) from exc
+
+    def _build_contents(
+        self,
+        request: CompletionRequest,
+    ) -> list:
+        contents = []
 
         if request.system_prompt:
-            contents.append(Content(role="model", parts=[Part(text=request.system_prompt)]))
+            contents.append(
+                self._Content(
+                    role="model",
+                    parts=[
+                        self._Part(
+                            text=request.system_prompt
+                        )
+                    ],
+                )
+            )
 
-        contents.append(Content(role="user", parts=[Part(text=request.prompt)]))
+        contents.append(
+            self._Content(
+                role="user",
+                parts=[
+                    self._Part(
+                        text=request.prompt
+                    )
+                ],
+            )
+        )
 
+        return contents
+
+    def _build_generation_config(
+        self,
+        request: CompletionRequest,
+    ) -> dict:
         config = {
             "temperature": request.model.temperature,
             "max_output_tokens": request.model.max_tokens,
@@ -58,26 +101,33 @@ class GeminiAdapter(BaseLLMAdapter):
         }
 
         if request.output_schema:
-            config["response_schema"] = request.output_schema
-            config["response_mime_type"] = "application/json"
+            config.update(
+                {
+                    "response_schema": request.output_schema,
+                    "response_mime_type": self.JSON_MIME_TYPE,
+                }
+            )
 
-        response = client.models.generate_content(
-            model=request.model.name,
-            contents=contents,
-            config=config,
-        )
+        return config
 
-        text = response.text or ""
-
+    @staticmethod
+    def _build_usage(response) -> CompletionUsage:
         usage = getattr(response, "usage_metadata", None)
 
-        return CompletionResponse(
-            text=text,
-            model=request.model,
-            usage=CompletionUsage(
-                input_tokens=getattr(usage, "prompt_token_count", 0),
-                output_tokens=getattr(usage, "candidates_token_count", 0),
-                total_tokens=getattr(usage, "total_token_count", 0),
+        return CompletionUsage(
+            input_tokens=getattr(
+                usage,
+                "prompt_token_count",
+                0,
             ),
-            finish_reason="stop",
+            output_tokens=getattr(
+                usage,
+                "candidates_token_count",
+                0,
+            ),
+            total_tokens=getattr(
+                usage,
+                "total_token_count",
+                0,
+            ),
         )
