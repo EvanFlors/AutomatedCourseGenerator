@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from cogenai.agents.config import AgentConfig
-from cogenai.agents.registry import prompt_registry
 from cogenai.agents_implementations.refiners.base import (
     BaseRefiner,
     RefinementScope,
@@ -11,29 +10,6 @@ from cogenai.agents_implementations.refiners.base import (
     parse_json_response,
     validate_fields,
 )
-from cogenai.agents_implementations.refiners.exceptions import RefinerIdMismatch
-
-
-SECTION_REFINER_PROMPT = """
-You are a SectionRefiner agent.
-Refine a single section (title, learning_objectives). Preserve the section id and existing block versions.
-
-OUTPUT RULES (do NOT violate):
-- Preserve the section id from the input.
-- Do not modify the blocks array (block ids and versions are immutable here).
-- Return valid JSON only. If the response would be truncated, omit optional fields rather than producing invalid JSON.
-
-OUTPUT FORMAT (JSON object):
-{
-  "title": "...",
-  "learning_objectives": ["..."],
-  "issues_addressed": ["id1", ...],
-  "notes": "short explanation"
-}
-""".strip()
-
-
-prompt_registry.register("section_refiner", "1.0.0", SECTION_REFINER_PROMPT)
 
 
 class SectionRefinerAgent(BaseRefiner[SectionRefinerInput, SectionRefinerOutput]):

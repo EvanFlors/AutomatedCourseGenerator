@@ -36,6 +36,7 @@ from cogenai.agents_implementations.refiner import CourseBundle, RefinerAgent, R
 from cogenai.agents_implementations.refiners import (
     BlockRefinerAgent,
     ContextRefinerAgent,
+    MetadataRefinerAgent,
     ModuleRefinerAgent,
     PlanRefinerAgent,
     PrerequisitesRefinerAgent,
@@ -50,29 +51,9 @@ from cogenai.bootstrap.container import get_llm_provider
 from cogenai.bootstrap.logging import configure_logging, get_logger
 from cogenai.domain.course.entities import ContentBlock, Course, Module, Section
 from cogenai.domain.shared.value_objects import new_module_id, new_section_id
+from cogenai.interfaces.dto.generation_request import GenerationRequestDTO
 
 logger = get_logger(__name__)
-
-
-# ----------------------------------------------- #
-# Default request                                 #
-# ----------------------------------------------- #
-
-DEFAULT_REQUEST: dict[str, Any] = {
-    "topic": "Python",
-    "audience": "beginner",
-    "difficulty": "beginner",
-    "learning_outcomes": ["Variables", "Data Types"],
-    "num_modules": 1,
-    "sections_per_module": 1,
-    "blocks_per_section": 3,
-    "max_modules": None,
-    "max_sections_per_module": None,
-    "max_blocks_per_section": None,
-    "strategy": "fundamental learning",
-    "block_types": ("concept", "example", "exercise"),
-    "max_iterations": 3,
-}
 
 
 # ----------------------------------------------- #
@@ -97,9 +78,10 @@ def build_agent_config(model_name: str | None = None) -> AgentConfig:
 
 
 def build_refiners(config: AgentConfig, llm_provider) -> dict[str, Any]:
-    """Construct the 6 granular refiner agents for the orchestrator."""
+    """Construct the 7 granular refiner agents for the orchestrator."""
     return {
         "context": ContextRefinerAgent(config, llm_provider),
+        "metadata": MetadataRefinerAgent(config, llm_provider),
         "prerequisites": PrerequisitesRefinerAgent(config, llm_provider),
         "plan": PlanRefinerAgent(config, llm_provider),
         "module": ModuleRefinerAgent(config, llm_provider),
@@ -113,14 +95,14 @@ def build_refiners(config: AgentConfig, llm_provider) -> dict[str, Any]:
 # ----------------------------------------------- #
 
 def generate_skeleton(
-    request: dict[str, Any],
+    request: GenerationRequestDTO,
     config: AgentConfig,
     llm_provider,
     feedback: str = "",
     prev_issues: tuple = (),
 ) -> tuple:
     """Run context synthesizer + curriculum planner. Returns (context, skeleton)."""
-    enhanced_instructions = request.get("text_instructions", "")
+    enhanced_instructions = request.text_instructions
     if feedback:
         enhanced_instructions += f"\n\nUser Feedback: {feedback}"
     if prev_issues:
@@ -133,10 +115,10 @@ def generate_skeleton(
     ctx_agent = ContextSynthesizerAgent(config, llm_provider)
     context = ctx_agent.run(
         ContextSynthesizerInput(
-            topic=request["topic"],
-            audience=request["audience"],
-            difficulty=request["difficulty"],
-            learning_outcomes=tuple(request["learning_outcomes"]),
+            topic=request.topic,
+            audience=request.audience,
+            difficulty=request.difficulty,
+            learning_outcomes=request.learning_outcomes,
             text_instructions=enhanced_instructions,
         )
     )
@@ -145,8 +127,8 @@ def generate_skeleton(
     skeleton = planner_agent.run(
         CurriculumPlannerInput(
             context=context,
-            num_modules=request["num_modules"],
-            sections_per_module=request["sections_per_module"],
+            num_modules=request.num_modules,
+            sections_per_module=request.sections_per_module,
         )
     )
     return context, skeleton
@@ -160,11 +142,11 @@ def validate_prerequisites(
 
 
 def generate_sections(
-    context, skeleton, request: dict[str, Any], config: AgentConfig, llm_provider
+    context, skeleton, request: GenerationRequestDTO, config: AgentConfig, llm_provider
 ) -> list[tuple]:
     """Run section_author → persona_adapter → content_block_generator per section."""
     all_sections: list[tuple] = []
-    block_types = tuple(request["block_types"])
+    block_types = request.block_types
 
     for section_spec in skeleton.sections:
         author = SectionAuthorAgent(config, llm_provider)
@@ -181,8 +163,8 @@ def generate_sections(
         adapted = adapter.run(
             PersonaAdapterInput(
                 draft=draft,
-                audience=request["audience"],
-                strategy=request.get("strategy"),
+                audience=request.audience,
+                strategy=request.strategy,
             )
         )
 
@@ -201,7 +183,7 @@ def generate_sections(
 
 
 def build_course(
-    skeleton, all_sections: list[tuple], request: dict[str, Any],
+    skeleton, all_sections: list[tuple], request: GenerationRequestDTO,
     context: GenerationContext | None = None,
     generation_iteration: int = 0,
 ) -> Course:
@@ -214,12 +196,12 @@ def build_course(
 
     If any `max_*` is None, that dimension is uncapped (LLM is free).
     If `context` is provided, the Course metadata is derived from it via
-    Course.from_context(); otherwise the request dict is used as a fallback.
+    Course.from_context(); otherwise the request DTO is used as a fallback.
     """
-    max_modules = request.get("max_modules")
-    max_sections_per_module = request.get("max_sections_per_module")
-    max_blocks_per_section = request.get("max_blocks_per_section")
-    sections_per_module_hint = request.get("sections_per_module")
+    max_modules = request.max_modules
+    max_sections_per_module = request.max_sections_per_module
+    max_blocks_per_section = request.max_blocks_per_section
+    sections_per_module_hint = request.sections_per_module
 
     sorted_sections = sorted(skeleton.sections, key=lambda s: s.order)
     blocks_by_title = {spec.title: blocks for spec, _, blocks in all_sections}
@@ -316,15 +298,15 @@ def build_course(
         )
     else:
         course = Course(
-            title=f"{request['topic']} for {request['audience']}",
+            title=f"{request.topic} for {request.audience}",
             summary=(
-                f"A {request['difficulty']} course on {request['topic']} "
-                f"covering {', '.join(request['learning_outcomes'])}"
+                f"A {request.difficulty} course on {request.topic} "
+                f"covering {', '.join(request.learning_outcomes)}"
             ),
-            learning_outcomes=tuple(request["learning_outcomes"]),
+            learning_outcomes=request.learning_outcomes,
             modules=tuple(modules),
             generation_iteration=generation_iteration,
-            source_topic=str(request.get("topic", "")),
+            source_topic=request.topic,
         )
 
     course_id = course.id
@@ -401,37 +383,39 @@ def prompt_feedback(prev: IterationResult | None) -> tuple[str, str]:
 
 
 def auto_feedback_decision(
-    request: dict[str, Any], prev: IterationResult | None
-) -> dict[str, Any]:
+    request: GenerationRequestDTO, prev: IterationResult | None
+) -> GenerationRequestDTO:
     """Decide what to change when the user pressed Enter (auto-refine)."""
-    request = dict(request)
     if prev is None or prev.evaluation_passed:
         return request
 
-    request["num_modules"] = min(request["num_modules"] + 1, 5)
-    request["sections_per_module"] = min(request["sections_per_module"] + 1, 3)
+    updates: dict[str, Any] = {
+        "num_modules": min(request.num_modules + 1, 5),
+        "sections_per_module": min(request.sections_per_module + 1, 3),
+    }
 
     additional_types = ["quiz", "key_points", "code", "summary", "check"]
-    block_types = list(request["block_types"])
+    block_types = list(request.block_types)
     if len(block_types) < 5:
         for bt in additional_types:
             if bt not in block_types:
                 block_types.append(bt)
                 break
-    request["block_types"] = tuple(block_types)
+    updates["block_types"] = tuple(block_types)
 
     new_outcomes = ["Functions", "Loops", "Data Structures", "Error Handling", "Best Practices"]
-    outcomes = list(request["learning_outcomes"])
+    outcomes = list(request.learning_outcomes)
     for no in new_outcomes:
         if no not in outcomes:
             outcomes.append(no)
             break
-    request["learning_outcomes"] = outcomes
+    updates["learning_outcomes"] = tuple(outcomes)
 
+    request = request.model_copy(update=updates)
     print(
-        f"\nAuto-increasing: modules={request['num_modules']}, "
-        f"sections/module={request['sections_per_module']}, "
-        f"types={request['block_types']}"
+        f"\nAuto-increasing: modules={request.num_modules}, "
+        f"sections/module={request.sections_per_module}, "
+        f"types={request.block_types}"
     )
     return request
 
@@ -472,7 +456,7 @@ def print_iteration_summary(result: IterationResult, verbose: bool = False) -> N
 # ----------------------------------------------- #
 
 def run_demo(
-    request: dict[str, Any],
+    request: GenerationRequestDTO,
     *,
     auto: bool = False,
     verbose: bool = False,
@@ -493,10 +477,9 @@ def run_demo(
         refiners=build_refiners(config, llm_provider),
     )
 
-    request = dict(request)
     if max_iterations is not None:
-        request["max_iterations"] = max_iterations
-    max_iter = request["max_iterations"]
+        request = request.model_copy(update={"max_iterations": max_iterations})
+    max_iter = request.max_iterations
 
     iteration = 0
     prev_result: IterationResult | None = None
@@ -701,18 +684,18 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         description="CourseForge demo CLI (multi-agent refinement pipeline)",
     )
     parser.add_argument(
-        "--topic", default=DEFAULT_REQUEST["topic"], help="Course topic"
+        "--topic", default="Python", help="Course topic"
     )
     parser.add_argument(
-        "--audience", default=DEFAULT_REQUEST["audience"],
+        "--audience", default="beginner",
         choices=["beginner", "professional", "engineer", "architect", "manager", "researcher", "student"],
     )
     parser.add_argument(
-        "--difficulty", default=DEFAULT_REQUEST["difficulty"],
+        "--difficulty", default="beginner",
         choices=["beginner", "intermediate", "advanced", "expert"],
     )
     parser.add_argument(
-        "--iterations", type=int, default=DEFAULT_REQUEST["max_iterations"],
+        "--iterations", type=int, default=3,
         help="Max refinement iterations",
     )
     parser.add_argument(
@@ -720,11 +703,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help="Skip interactive prompts; auto-increase scope and feedback each iteration",
     )
     parser.add_argument(
-        "--num-modules", type=int, default=DEFAULT_REQUEST["num_modules"],
+        "--num-modules", type=int, default=1,
         help="Hint to the LLM (preferred module count)",
     )
     parser.add_argument(
-        "--sections-per-module", type=int, default=DEFAULT_REQUEST["sections_per_module"],
+        "--sections-per-module", type=int, default=1,
         help="Hint to the LLM (preferred sections per module)",
     )
     parser.add_argument(
@@ -750,21 +733,25 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def _build_request_from_args(args: argparse.Namespace) -> GenerationRequestDTO:
+    """Build a validated GenerationRequestDTO from parsed CLI args."""
+    return GenerationRequestDTO(
+        topic=args.topic,
+        audience=args.audience,
+        difficulty=args.difficulty,
+        learning_outcomes=("Variables", "Data Types"),
+        num_modules=args.num_modules,
+        sections_per_module=args.sections_per_module,
+        max_modules=args.max_modules,
+        max_sections_per_module=args.max_sections_per_module,
+        max_blocks_per_section=args.max_blocks_per_section,
+        max_iterations=args.iterations,
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv if argv is not None else sys.argv[1:])
-
-    request = dict(DEFAULT_REQUEST)
-    request.update({
-        "topic": args.topic,
-        "audience": args.audience,
-        "difficulty": args.difficulty,
-        "num_modules": args.num_modules,
-        "sections_per_module": args.sections_per_module,
-        "max_modules": args.max_modules,
-        "max_sections_per_module": args.max_sections_per_module,
-        "max_blocks_per_section": args.max_blocks_per_section,
-        "max_iterations": args.iterations,
-    })
+    request = _build_request_from_args(args)
 
     course, report, iteration = run_demo(request, auto=args.auto, verbose=args.verbose)
     if args.json:

@@ -15,6 +15,7 @@ from cogenai.agents_implementations.refiners import (
     BlockRefinerInput,
     ContextRefinerInput,
     IssueAnalyzer,
+    MetadataRefinerInput,
     ModuleRefinerInput,
     PlanRefinerInput,
     PrerequisitesRefinerInput,
@@ -217,6 +218,8 @@ class RefinerAgent(BaseAgent[RefinerInput, RefinedDraft]):
     ) -> Any:
         if step.level == "context":
             return self._run_context(refiner, input_data, step_issues)
+        if step.level == "metadata":
+            return self._run_metadata(refiner, input_data, step_issues)
         if step.level == "prerequisites":
             return self._run_prerequisites(refiner, input_data, step_issues)
         if step.level == "plan":
@@ -248,6 +251,29 @@ class RefinerAgent(BaseAgent[RefinerInput, RefinedDraft]):
             user_feedback=input_data.user_feedback,
         )
         return refiner.run(inp).context
+
+    def _run_metadata(
+        self,
+        refiner: BaseAgent,
+        input_data: RefinerInput,
+        step_issues: tuple[EvaluationIssue, ...],
+    ) -> Any:
+        from cogenai.agents_implementations.refiners.metadata_refiner import (
+            _compute_duration_minutes,
+        )
+        course = input_data.course
+        ctx = getattr(course, "context", None)
+        inp = MetadataRefinerInput(
+            course_id=getattr(course, "id", "course"),
+            current_tags=tuple(getattr(course, "tags", ())),
+            current_language=str(getattr(course, "language", "en")),
+            current_duration_minutes=_compute_duration_minutes(course),
+            topic=str(getattr(ctx, "topic", "")) if ctx is not None else "",
+            audience=str(getattr(ctx, "audience", "")) if ctx is not None else "",
+            difficulty=str(getattr(ctx, "difficulty", "")) if ctx is not None else "",
+            issues=step_issues,
+        )
+        return refiner.run(inp)
 
     def _run_prerequisites(
         self,
@@ -388,6 +414,8 @@ class RefinerAgent(BaseAgent[RefinerInput, RefinedDraft]):
     def _apply_artifact(self, course: Any, level: str, artifact: Any) -> Any:
         if level == "context":
             return self._apply_context(course, artifact)
+        if level == "metadata":
+            return self._apply_metadata(course, artifact)
         if level == "prerequisites":
             return self._apply_prerequisites(course, artifact)
         if level == "plan":
@@ -457,6 +485,39 @@ class RefinerAgent(BaseAgent[RefinerInput, RefinedDraft]):
             reason="input_data.course is a bare Course without a CourseBundle wrapper",
         )
         return course
+
+    def _apply_metadata(self, course: Any, artifact: Any) -> Any:
+        if not isinstance(course, CourseBundle):
+            logger.warning(
+                "refinement_metadata_skipped_no_bundle",
+                reason="input_data.course is a bare Course without a CourseBundle wrapper",
+            )
+            return course
+        from cogenai.agents_implementations.refiners.metadata_refiner import (
+            MetadataRefinerOutput,
+        )
+        if not isinstance(artifact, MetadataRefinerOutput):
+            return course
+        existing = course.course
+        from cogenai.domain.course import Course
+        new_course = Course(
+            id=existing.id,
+            title=existing.title,
+            summary=existing.summary,
+            language=artifact.language,
+            audience=existing.audience,
+            difficulty=existing.difficulty,
+            learning_outcomes=existing.learning_outcomes,
+            modules=existing.modules,
+            estimated_duration_minutes=int(artifact.estimated_duration_minutes or 0),
+            tags=artifact.tags,
+            created_at=existing.created_at,
+            updated_at=existing.updated_at,
+            version=getattr(existing, "version", 0) + 1,
+            generation_iteration=getattr(existing, "generation_iteration", 0) + 1,
+            source_topic=existing.source_topic,
+        )
+        return replace(course, course=new_course)
 
     def _apply_plan(self, course: Any, artifact: Any) -> Any:
         if isinstance(course, CourseBundle):

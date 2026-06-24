@@ -116,6 +116,22 @@ def make_plan_response(
     )
 
 
+def make_metadata_response(
+    tags=("python", "beginner", "tutorial"),
+    language: str = "en",
+    issues=("i-1",),
+) -> str:
+    import json
+    return json.dumps(
+        {
+            "tags": list(tags),
+            "language": language,
+            "issues_addressed": list(issues),
+            "notes": "ok",
+        }
+    )
+
+
 class StubProvider:
     def health_check(self) -> bool:
         return True

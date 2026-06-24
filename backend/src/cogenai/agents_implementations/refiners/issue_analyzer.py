@@ -29,6 +29,7 @@ class IssueAnalyzer:
         "depth": "context",
         "prerequisite": "prerequisites",
         "structural": "plan",
+        "metadata": "metadata",
     }
 
     def analyze(
@@ -37,6 +38,7 @@ class IssueAnalyzer:
     ) -> IssueAnalysis:
         by_level: dict[RefinementLevel, list[EvaluationIssue]] = {
             "context": [],
+            "metadata": [],
             "prerequisites": [],
             "plan": [],
             "module": [],
@@ -66,7 +68,9 @@ class IssueAnalyzer:
     ) -> dict[RefinementLevel, tuple[RefinementLevel, ...]]:
         cascade: dict[RefinementLevel, list[RefinementLevel]] = {}
         if by_level["context"]:
-            cascade["context"] = ("prerequisites", "plan", "module", "section", "block")
+            cascade["context"] = ("metadata", "prerequisites", "plan", "module", "section", "block")
+        if by_level["metadata"]:
+            cascade["metadata"] = ()
         if by_level["prerequisites"]:
             cascade["prerequisites"] = ("plan",)
         if by_level["plan"]:

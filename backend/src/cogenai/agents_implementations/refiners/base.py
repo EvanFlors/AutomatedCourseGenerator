@@ -10,7 +10,7 @@ from cogenai.agents.config import AgentConfig
 from cogenai.domain.course import ContentBlock, Course, Module, Section
 from cogenai.domain.shared.value_objects import BlockId, CourseId, ModuleId, SectionId
 
-RefinementLevel = Literal["context", "prerequisites", "plan", "module", "section", "block"]
+RefinementLevel = Literal["context", "metadata", "prerequisites", "plan", "module", "section", "block"]
 
 Input = TypeVar("Input")
 Output = TypeVar("Output")
@@ -136,6 +136,28 @@ class BlockRefinerInput:
 @dataclass(frozen=True)
 class BlockRefinerOutput:
     block: ContentBlock
+    issues_addressed: tuple[str, ...] = field(default_factory=tuple)
+    refinement_notes: str = ""
+    tokens_used: object | None = None
+
+
+@dataclass(frozen=True)
+class MetadataRefinerInput:
+    course_id: CourseId
+    current_tags: tuple[str, ...]
+    current_language: str
+    current_duration_minutes: int
+    topic: str = ""
+    audience: str = ""
+    difficulty: str = ""
+    issues: tuple["cogenai.agents_implementations.evaluator.EvaluationIssue", ...] = ()
+
+
+@dataclass(frozen=True)
+class MetadataRefinerOutput:
+    tags: tuple[str, ...]
+    language: str
+    estimated_duration_minutes: int
     issues_addressed: tuple[str, ...] = field(default_factory=tuple)
     refinement_notes: str = ""
     tokens_used: object | None = None

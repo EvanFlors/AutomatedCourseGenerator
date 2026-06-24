@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from cogenai.agents.config import AgentConfig
-from cogenai.agents.registry import prompt_registry
 from cogenai.agents_implementations.curriculum_planner import (
     CourseSkeleton,
     ModuleSpec,
@@ -17,36 +16,6 @@ from cogenai.agents_implementations.refiners.base import (
     parse_json_response,
     validate_fields,
 )
-
-
-PLAN_REFINER_PROMPT = """
-You are a PlanRefiner agent.
-Refine a CourseSkeleton. Adjust module titles, summaries, ordering, topics, sections, and prerequisites.
-
-OUTPUT RULES (do NOT violate - D-R1 + D-R8):
-- NEVER delete a module that exists in the input. You may add new modules or modify existing ones.
-- NEVER delete a section that exists in the input. You may modify existing ones.
-- Preserve existing module titles; if you want to rename, include the OLD title in `preserved_titles`.
-- Return valid JSON only. If the response would be truncated, omit optional fields rather than producing invalid JSON.
-
-OUTPUT FORMAT (JSON object):
-{
-  "modules": [
-    {"title": "...", "summary": "...", "order": 0, "topics": ["..."]}
-  ],
-  "sections": [
-    {"title": "...", "topic": "...", "order": 0, "learning_objectives": ["..."]}
-  ],
-  "prerequisites": [
-    {"from_topic": "...", "to_topic": "...", "type": "requires|builds_on|enables"}
-  ],
-  "issues_addressed": ["id1", ...],
-  "notes": "short explanation"
-}
-""".strip()
-
-
-prompt_registry.register("plan_refiner", "1.0.0", PLAN_REFINER_PROMPT)
 
 
 VALID_PREREQ_TYPES = {"requires", "builds_on", "enables"}

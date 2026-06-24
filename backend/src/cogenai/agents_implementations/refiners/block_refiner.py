@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from cogenai.agents.config import AgentConfig
-from cogenai.agents.registry import prompt_registry
 from cogenai.agents_implementations.refiners.base import (
     BaseRefiner,
     BlockRefinerInput,
@@ -11,29 +10,6 @@ from cogenai.agents_implementations.refiners.base import (
     parse_json_response,
     validate_fields,
 )
-from cogenai.agents_implementations.refiners.exceptions import RefinerIdMismatch
-
-
-BLOCK_REFINER_PROMPT = """
-You are a BlockRefiner agent.
-Refine a single content block to address the issues without changing the block id, type, or order.
-
-OUTPUT RULES (do NOT violate):
-- Preserve the block id from the input.
-- Preserve the block type field.
-- Preserve the block order field.
-- Return valid JSON only. If the response would be truncated, omit optional fields rather than producing invalid JSON.
-
-OUTPUT FORMAT (JSON object):
-{
-  "content": {...},
-  "issues_addressed": ["id1", ...],
-  "notes": "short explanation"
-}
-""".strip()
-
-
-prompt_registry.register("block_refiner", "1.0.0", BLOCK_REFINER_PROMPT)
 
 
 class BlockRefinerAgent(BaseRefiner[BlockRefinerInput, BlockRefinerOutput]):

@@ -2,7 +2,6 @@ from dataclasses import dataclass
 from typing import Generic, TypeVar
 
 from cogenai.agents.config import AgentConfig
-from cogenai.agents.registry import prompt_registry
 from cogenai.bootstrap.logging import get_logger
 from cogenai.domain.ports.llm import LLMProvider
 from cogenai.domain.value_objects.llm import CompletionRequest
@@ -22,14 +21,11 @@ class BaseAgent(Generic[Input, Output]):
 
     def _get_prompt(self, version: str = "1.0.0") -> str:
         bundle = yaml_get_prompt(self.name, version)
-        if bundle is not None:
-            return bundle.system_prompt
-
-        legacy = prompt_registry.get_prompt(self.name, version)
-        if legacy is None:
-            raise ValueError(f"No legacy prompt registered for {self.name} version {version}")
-
-        return legacy
+        if bundle is None:
+            raise ValueError(
+                f"No YAML prompt registered for {self.name} version {version}"
+            )
+        return bundle.system_prompt
 
     def _call_llm(
         self,

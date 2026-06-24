@@ -33,6 +33,7 @@ class RefinementPlanner:
 
     LEVEL_ORDER: tuple[RefinementLevel, ...] = (
         "context",
+        "metadata",
         "prerequisites",
         "plan",
         "module",

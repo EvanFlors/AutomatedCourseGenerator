@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from cogenai.agents.config import AgentConfig
-from cogenai.agents.registry import prompt_registry
 from cogenai.agents_implementations.curriculum_planner import Prerequisite
 from cogenai.agents_implementations.refiners.base import (
     BaseRefiner,
@@ -12,28 +11,6 @@ from cogenai.agents_implementations.refiners.base import (
     parse_json_response,
     validate_fields,
 )
-
-
-PREREQUISITES_REFINER_PROMPT = """
-You are a PrerequisitesRefiner agent.
-Refine the prerequisite graph for a course. Adjust the from/to relationships and types.
-
-OUTPUT RULES (do NOT violate):
-- Each prerequisite must have non-empty from_topic and to_topic fields.
-- Return valid JSON only. If the response would be truncated, return fewer prerequisites rather than producing invalid JSON.
-
-OUTPUT FORMAT (JSON object):
-{
-  "prerequisites": [
-    {"from_topic": "...", "to_topic": "...", "type": "requires|builds_on|enables"}
-  ],
-  "issues_addressed": ["id1", ...],
-  "notes": "short explanation"
-}
-""".strip()
-
-
-prompt_registry.register("prerequisites_refiner", "1.0.0", PREREQUISITES_REFINER_PROMPT)
 
 
 VALID_PREREQ_TYPES = {"requires", "builds_on", "enables"}

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from cogenai.agents.config import AgentConfig
-from cogenai.agents.registry import prompt_registry
 from cogenai.agents_implementations.refiners.base import (
     BaseRefiner,
     ModuleRefinerInput,
@@ -11,31 +10,6 @@ from cogenai.agents_implementations.refiners.base import (
     parse_json_response,
     validate_fields,
 )
-from cogenai.agents_implementations.refiners.exceptions import RefinerIdMismatch
-
-
-MODULE_REFINER_PROMPT = """
-You are a ModuleRefiner agent.
-Refine a single module. Preserve the module id and all section/block ids within.
-
-OUTPUT RULES (do NOT violate):
-- Preserve the module id from the input.
-- Preserve all section ids within this module.
-- Preserve all block ids within sections.
-- Do not delete sections; you may rename them or change their order.
-- Return valid JSON only. If the response would be truncated, omit optional fields rather than producing invalid JSON.
-
-OUTPUT FORMAT (JSON object):
-{
-  "title": "...",
-  "summary": "...",
-  "issues_addressed": ["id1", ...],
-  "notes": "short explanation"
-}
-""".strip()
-
-
-prompt_registry.register("module_refiner", "1.0.0", MODULE_REFINER_PROMPT)
 
 
 class ModuleRefinerAgent(BaseRefiner[ModuleRefinerInput, ModuleRefinerOutput]):

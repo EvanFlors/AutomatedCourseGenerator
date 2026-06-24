@@ -9,11 +9,16 @@ from cogenai.agents_implementations.evaluator import (
     EvaluationIssue, EvaluationReport, RubricScores,
 )
 from cogenai.agents_implementations.refiner import CourseBundle, RefinerAgent, RefinerInput
-from cogenai.agents_implementations.refiners import ContextRefinerAgent
+from cogenai.agents_implementations.refiners import (
+    ContextRefinerAgent,
+    MetadataRefinerAgent,
+)
 from cogenai.domain.course import Course, Module
 from cogenai.domain.shared.value_objects import new_module_id
 from cogenai.domain.value_objects.llm import CompletionResponse, CompletionUsage
-from tests.unit.refinement._fixtures import FakeProvider, make_context_response
+from tests.unit.refinement._fixtures import (
+    FakeProvider, make_context_response, make_metadata_response,
+)
 
 
 def _config() -> AgentConfig:
@@ -172,3 +177,88 @@ class TestCliMetadataPropagation:
         assert "architect" in out2.revised.course.title
         assert out2.revised.course.version == 3
         assert out2.revised.course.generation_iteration == 3
+
+    def test_metadata_refiner_updates_tags_and_language(self):
+        """E2E: a course-scope issue with category='metadata' routes
+        through the IssueAnalyzer to the new metadata_refiner, which
+        updates Course.tags and Course.language on the bundle."""
+        bundle = self._bundle()
+        bundle.course = Course(
+            id=bundle.course.id,
+            title=bundle.course.title,
+            summary=bundle.course.summary,
+            language="en",
+            audience=bundle.course.audience,
+            difficulty=bundle.course.difficulty,
+            learning_outcomes=bundle.course.learning_outcomes,
+            modules=bundle.course.modules,
+            tags=("old", "stale"),
+            version=bundle.course.version,
+            generation_iteration=bundle.course.generation_iteration,
+            source_topic=bundle.course.source_topic,
+        )
+        meta_provider = FakeProvider(returns=make_metadata_response(
+            tags=["python", "beginner", "tutorial", "fundamentals"],
+            language="es",
+        ))
+        config = _config()
+        meta_refiner = MetadataRefinerAgent(config, meta_provider)
+        orchestrator = RefinerAgent(
+            config=config,
+            llm_provider=SequenceProvider([[], []]),
+            refiners={"metadata": meta_refiner},
+        )
+        report = EvaluationReport(
+            overall_score=0.4, passed=False, rubric=RubricScores(),
+            issues=(EvaluationIssue(
+                id="m-1", severity="medium", scope="course",
+                target_id=str(bundle.course.id),
+                category="metadata",
+                message="tags are stale and language is wrong",
+            ),),
+        )
+        refined = orchestrator.run(RefinerInput(
+            course=bundle, evaluation_report=report,
+        ))
+        assert "python" in refined.revised.course.tags
+        assert "beginner" in refined.revised.course.tags
+        assert refined.revised.course.language == "es"
+        assert "old" not in refined.revised.course.tags
+        assert refined.revised.course.version > bundle.course.version
+
+    def test_metadata_refiner_computes_duration_deterministically(self):
+        """Duration comes from the course structure, not the LLM. The
+        refiner just propagates the computed value into the Course."""
+        from cogenai.agents_implementations.refiners import (
+            _compute_duration_minutes,
+        )
+        bundle = self._bundle(modules=(_module(),))
+        m = bundle.course.modules[0]
+        from cogenai.domain.shared.value_objects import new_section_id
+        from cogenai.domain.course import ContentBlock, Section
+        blocks = (
+            ContentBlock(id=bundle.course.id, type="concept", order=0, estimated_time_minutes=5),
+            ContentBlock(id=bundle.course.id, type="exercise", order=1, estimated_time_minutes=10),
+        )
+        section = Section(
+            id=new_section_id(), title="S", order=0,
+            blocks=blocks, learning_objectives=["LO"],
+        )
+        new_module = Module(
+            id=m.id, title=m.title, order=m.order,
+            sections=(section,),
+        )
+        bundle.course = Course(
+            id=bundle.course.id,
+            title=bundle.course.title,
+            summary=bundle.course.summary,
+            language=bundle.course.language,
+            audience=bundle.course.audience,
+            difficulty=bundle.course.difficulty,
+            learning_outcomes=bundle.course.learning_outcomes,
+            modules=(new_module,),
+            version=bundle.course.version,
+            generation_iteration=bundle.course.generation_iteration,
+            source_topic=bundle.course.source_topic,
+        )
+        assert _compute_duration_minutes(bundle) == 15

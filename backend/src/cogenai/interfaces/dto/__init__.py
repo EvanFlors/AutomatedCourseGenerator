@@ -1,6 +1,7 @@
 from cogenai.interfaces.dto.contract import JSONOutputContract
 from cogenai.interfaces.dto.course import CourseDTO
 from cogenai.interfaces.dto.generation import GenerationMetadataDTO
+from cogenai.interfaces.dto.generation_request import GenerationRequestDTO
 
 
 def create_contract(

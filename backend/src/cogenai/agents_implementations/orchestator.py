@@ -4,7 +4,6 @@ from datetime import datetime
 from cogenai.agents.base import BaseAgent
 from cogenai.agents.config import AgentConfig
 from cogenai.agents.context import AgentContext
-from cogenai.agents.registry import prompt_registry
 from cogenai.agents_implementations.consistency_checker import (
     ConsistencyCheckerInput,
     ConsistencyReport,

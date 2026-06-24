@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from cogenai.agents.config import AgentConfig
-from cogenai.agents.registry import prompt_registry
 from cogenai.agents_implementations.context_synthesizer import GenerationContext
 from cogenai.agents_implementations.refiners.base import (
     BaseRefiner,
@@ -12,30 +11,6 @@ from cogenai.agents_implementations.refiners.base import (
     parse_json_response,
     validate_fields,
 )
-
-
-CONTEXT_REFINER_PROMPT = """
-You are a ContextRefiner agent.
-Refine the course context: audience, difficulty, outcomes, instructions.
-
-OUTPUT RULES (do NOT violate):
-- The topic field is IMMUTABLE. Never change it.
-- Preserve document and reference_courses arrays.
-- Return valid JSON only. If the response would be truncated, omit optional fields rather than producing invalid JSON.
-
-OUTPUT FORMAT (JSON object):
-{
-  "audience": "beginner|professional|engineer|architect|manager|researcher|student",
-  "difficulty": "beginner|intermediate|advanced|expert",
-  "learning_outcomes": ["..."],
-  "text_instructions": "...",
-  "issues_addressed": ["id1", ...],
-  "notes": "short explanation"
-}
-""".strip()
-
-
-prompt_registry.register("context_refiner", "1.0.0", CONTEXT_REFINER_PROMPT)
 
 
 VALID_AUDIENCE = {"beginner", "professional", "engineer", "architect", "manager", "researcher", "student"}

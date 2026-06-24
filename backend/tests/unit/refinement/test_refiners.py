@@ -595,7 +595,7 @@ class TestRefinersD11Immutability:
 class TestRefinersPromptRegistry:
 
     def test_all_refiners_have_prompts(self):
-        from cogenai.agents.registry import prompt_registry
+        from cogenai.prompt import get_prompt as yaml_get_prompt
         for name in (
             "context_refiner",
             "prerequisites_refiner",
@@ -604,6 +604,6 @@ class TestRefinersPromptRegistry:
             "section_refiner",
             "block_refiner",
         ):
-            prompt = prompt_registry.get_prompt(name, "1.0.0")
-            assert prompt is not None
-            assert "OUTPUT RULES" in prompt
+            bundle = yaml_get_prompt(name, "1.0.0")
+            assert bundle is not None, f"missing YAML prompt for {name}"
+            assert "OUTPUT RULES" in bundle.system_prompt
