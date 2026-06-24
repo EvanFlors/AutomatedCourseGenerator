@@ -95,6 +95,26 @@ class RefinedDraft:
     steps_skipped: tuple[RefinementStep, ...] = field(default_factory=tuple)
 
 
+class BudgetExceeded(Exception):
+
+    def __init__(self, used: int, cap: int, level: str = ""):
+        self.used = used
+        self.cap = cap
+        self.level = level
+        super().__init__(f"token budget exhausted ({used}/{cap}) at level={level!r}")
+
+
+def sum_tokens(artifact: Any) -> int:
+    """Sum input + output tokens from a refiner artifact (best-effort)."""
+    tokens = getattr(artifact, "tokens_used", None)
+    if tokens is None:
+        return 0
+    in_t = int(getattr(tokens, "input_tokens", 0) or 0)
+    out_t = int(getattr(tokens, "output_tokens", 0) or 0)
+    total = int(getattr(tokens, "total_tokens", in_t + out_t) or 0)
+    return total if total else (in_t + out_t)
+
+
 class RefinerAgent(BaseAgent[RefinerInput, RefinedDraft]):
 
     def __init__(
@@ -108,7 +128,7 @@ class RefinerAgent(BaseAgent[RefinerInput, RefinedDraft]):
         self._analyzer = IssueAnalyzer()
         self._planner = RefinementPlanner()
 
-    def run(self, input_data: RefinerInput) -> RefinedDraft:
+    def run(self, input_data: RefinerInput, *, token_budget: int | None = None) -> RefinedDraft:
         issues = self._collect_issues(input_data)
         analysis = self._analyzer.analyze(issues)
         course_id = str(getattr(input_data.course, "id", "course"))
@@ -116,45 +136,60 @@ class RefinerAgent(BaseAgent[RefinerInput, RefinedDraft]):
 
         applied_steps: list[RefinementStep] = []
         skipped_steps: list[RefinementStep] = []
-        artifacts: list[tuple[str, str, Any]] = []
         all_addressed: list[str] = []
         course: Any = input_data.course
+        tokens_used = 0
+        budget_exhausted = False
+        budget_exhausted_level = ""
 
         for step in plan.steps:
-            result = self._execute_step(step, input_data, issues)
-            if result.success:
-                course = self._apply_artifact(course, step.level, result.artifact)
-                applied_steps.append(result.step)
-                artifacts.append((step.level, step.target_id, result.artifact))
-                all_addressed.extend(result.issues_addressed)
-                logger.info(
-                    "refinement_step_applied",
-                    step_id=step.step_id,
-                    level=step.level,
-                    target_id=step.target_id,
-                    issues=step.issue_ids,
-                )
-            else:
+            if budget_exhausted:
+                skipped_steps.append(step)
+                continue
+            try:
+                result = self._execute_step(step, input_data, issues)
+            except BudgetExceeded as exc:
+                budget_exhausted = True
+                budget_exhausted_level = exc.level
+                skipped_steps.append(step)
+                break
+            if not result.success:
                 skipped_steps.append(result.step)
+                continue
+            tokens_used += self._sum_tokens(result.artifact)
+
+            if token_budget is not None and tokens_used > token_budget:
+                budget_exhausted = True
+                budget_exhausted_level = step.level
+                skipped_steps.append(step)
                 logger.warning(
-                    "refinement_step_skipped",
-                    step_id=step.step_id,
-                    level=step.level,
-                    target_id=step.target_id,
-                    error=result.error,
+                    "refinement_budget_exhausted",
+                    used=tokens_used, cap=token_budget, level=step.level,
                 )
+                break
+            course = self._apply_artifact(course, step.level, result.artifact)
+            applied_steps.append(result.step)
+            all_addressed.extend(result.issues_addressed)
+
+        notes = plan.rationale
+        if budget_exhausted:
+            notes = f"{notes}; budget_exhausted at level={budget_exhausted_level} ({tokens_used}/{token_budget} tokens)"
 
         refined = RefinedDraft(
             original=input_data.course,
             revised=course,
             issues_addressed=tuple(all_addressed),
             auto_fixed=bool(applied_steps),
-            refinement_notes=plan.rationale,
+            refinement_notes=notes,
             steps_applied=tuple(applied_steps),
             steps_skipped=tuple(skipped_steps),
         )
         self._log_execution(input_data, refined)
         return refined
+
+    @staticmethod
+    def _sum_tokens(artifact: Any) -> int:
+        return sum_tokens(artifact)
 
     def _collect_issues(self, input_data: RefinerInput) -> tuple[EvaluationIssue, ...]:
         issues: list[EvaluationIssue] = list(input_data.evaluation_report.issues)
@@ -250,7 +285,7 @@ class RefinerAgent(BaseAgent[RefinerInput, RefinedDraft]):
             issues=step_issues,
             user_feedback=input_data.user_feedback,
         )
-        return refiner.run(inp).context
+        return refiner.run(inp)
 
     def _run_metadata(
         self,
@@ -294,7 +329,7 @@ class RefinerAgent(BaseAgent[RefinerInput, RefinedDraft]):
             issues=step_issues,
             course_topic=str(getattr(course, "title", "")),
         )
-        return refiner.run(inp).prerequisites
+        return refiner.run(inp)
 
     def _run_plan(
         self,
@@ -321,7 +356,7 @@ class RefinerAgent(BaseAgent[RefinerInput, RefinedDraft]):
             context=ctx,
             constraints=(),
         )
-        return refiner.run(inp).plan
+        return refiner.run(inp)
 
     def _run_module(
         self,
@@ -342,7 +377,7 @@ class RefinerAgent(BaseAgent[RefinerInput, RefinedDraft]):
             issues=step_issues,
             context=getattr(course, "context", None),
         )
-        return refiner.run(inp).module
+        return refiner.run(inp)
 
     def _run_section(
         self,
@@ -365,7 +400,7 @@ class RefinerAgent(BaseAgent[RefinerInput, RefinedDraft]):
             issues=step_issues,
             context=getattr(course, "context", None),
         )
-        return refiner.run(inp).section
+        return refiner.run(inp)
 
     def _run_block(
         self,
@@ -388,7 +423,7 @@ class RefinerAgent(BaseAgent[RefinerInput, RefinedDraft]):
             issues=step_issues,
             context=getattr(course, "context", None),
         )
-        return refiner.run(inp).block
+        return refiner.run(inp)
 
     def _find_module(self, course: Any, target_id: str) -> Any:
         for m in getattr(course, "modules", ()):
@@ -429,10 +464,11 @@ class RefinerAgent(BaseAgent[RefinerInput, RefinedDraft]):
         return course
 
     def _apply_context(self, course: Any, artifact: Any) -> Any:
+        context = getattr(artifact, "context", artifact)
         if isinstance(course, CourseBundle):
-            new_bundle = replace(course, context=artifact)
+            new_bundle = replace(course, context=context)
             try:
-                new_bundle = self._sync_metadata_from_context(new_bundle, artifact)
+                new_bundle = self._sync_metadata_from_context(new_bundle, context)
             except Exception as exc:
                 logger.warning("context_metadata_sync_skipped", error=str(exc))
             return new_bundle
@@ -478,8 +514,9 @@ class RefinerAgent(BaseAgent[RefinerInput, RefinedDraft]):
         return replace(bundle, course=rebuilt)
 
     def _apply_prerequisites(self, course: Any, artifact: Any) -> Any:
+        prereqs = getattr(artifact, "prerequisites", artifact)
         if isinstance(course, CourseBundle):
-            return replace(course, prerequisites=tuple(artifact))
+            return replace(course, prerequisites=tuple(prereqs))
         logger.warning(
             "refinement_prerequisites_skipped_no_bundle",
             reason="input_data.course is a bare Course without a CourseBundle wrapper",
@@ -520,15 +557,17 @@ class RefinerAgent(BaseAgent[RefinerInput, RefinedDraft]):
         return replace(course, course=new_course)
 
     def _apply_plan(self, course: Any, artifact: Any) -> Any:
+        plan = getattr(artifact, "plan", artifact)
         if isinstance(course, CourseBundle):
-            return replace(course, plan=artifact)
+            return replace(course, plan=plan)
         logger.warning(
             "refinement_plan_skipped_no_bundle",
             reason="input_data.course is a bare Course without a CourseBundle wrapper",
         )
         return course
 
-    def _apply_module(self, course: Any, new_module: Any) -> Any:
+    def _apply_module(self, course: Any, artifact: Any) -> Any:
+        new_module = getattr(artifact, "module", artifact)
         course_entity = course.course if isinstance(course, CourseBundle) else course
         new_modules = tuple(
             new_module if str(m.id) == str(new_module.id) else m
@@ -539,7 +578,8 @@ class RefinerAgent(BaseAgent[RefinerInput, RefinedDraft]):
             return replace(course, course=rebuilt)
         return rebuilt
 
-    def _apply_section(self, course: Any, new_section: Any) -> Any:
+    def _apply_section(self, course: Any, artifact: Any) -> Any:
+        new_section = getattr(artifact, "section", artifact)
         course_entity = course.course if isinstance(course, CourseBundle) else course
         new_modules: list[Any] = []
         for module in course_entity.modules:
@@ -557,7 +597,8 @@ class RefinerAgent(BaseAgent[RefinerInput, RefinedDraft]):
             return replace(course, course=rebuilt)
         return rebuilt
 
-    def _apply_block_to_course(self, course: Any, new_block: Any) -> Any:
+    def _apply_block_to_course(self, course: Any, artifact: Any) -> Any:
+        new_block = getattr(artifact, "block", artifact)
         course_entity = course.course if isinstance(course, CourseBundle) else course
         new_modules: list[Any] = []
         for module in course_entity.modules:

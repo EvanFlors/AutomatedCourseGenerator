@@ -38,6 +38,10 @@ class GenerationRequestDTO(BaseModel):
     max_modules: int | None = Field(None, ge=1, le=20)
     max_sections_per_module: int | None = Field(None, ge=1, le=10)
     max_blocks_per_section: int | None = Field(None, ge=1, le=20)
+    token_budget: int | None = Field(
+        None, ge=1_000,
+        description="Per-job token cap (input+output). When None, settings.token_budget_input + output is used.",
+    )
 
     @field_validator("learning_outcomes", "block_types", mode="before")
     @classmethod

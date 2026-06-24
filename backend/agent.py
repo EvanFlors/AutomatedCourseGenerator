@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import sys
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Any
 
 from cogenai.agents.config import AgentConfig
@@ -51,7 +52,11 @@ from cogenai.bootstrap.container import get_llm_provider
 from cogenai.bootstrap.logging import configure_logging, get_logger
 from cogenai.domain.course.entities import ContentBlock, Course, Module, Section
 from cogenai.domain.shared.value_objects import new_module_id, new_section_id
+from cogenai.interfaces.dto import create_contract
+from cogenai.interfaces.dto.evaluation import EvaluationDTO, RubricScoresDTO
+from cogenai.interfaces.dto.generation import RefinementDTO
 from cogenai.interfaces.dto.generation_request import GenerationRequestDTO
+from cogenai.interfaces.dto.issue import IssueDTO
 
 logger = get_logger(__name__)
 
@@ -461,6 +466,7 @@ def run_demo(
     auto: bool = False,
     verbose: bool = False,
     max_iterations: int | None = None,
+    token_budget: int | None = None,
 ) -> tuple[Course, Any, int]:
     configure_logging()
     llm_provider = get_llm_provider()
@@ -477,9 +483,15 @@ def run_demo(
         refiners=build_refiners(config, llm_provider),
     )
 
+    updates: dict = {}
     if max_iterations is not None:
-        request = request.model_copy(update={"max_iterations": max_iterations})
+        updates["max_iterations"] = max_iterations
+    if token_budget is not None:
+        updates["token_budget"] = token_budget
+    if updates:
+        request = request.model_copy(update=updates)
     max_iter = request.max_iterations
+    effective_token_budget = getattr(request, "token_budget", None)
 
     iteration = 0
     prev_result: IterationResult | None = None
@@ -560,7 +572,8 @@ def run_demo(
                 ),
                 evaluation_report=report,
                 user_feedback=feedback_text if feedback_text else "",
-            )
+            ),
+            token_budget=effective_token_budget,
         )
         logger.info(
             f"Refinement: applied={len(refined.steps_applied)}, "
@@ -621,58 +634,39 @@ def print_final_course(course: Course, report, iteration: int, verbose: bool = F
     print(f"Iterations:   {iteration}")
 
 
-def _course_to_dict(course: Course, report, iteration: int) -> dict:
-    return {
-        "schema_version": "1.0.0",
-        "title": course.title,
-        "summary": course.summary,
-        "audience": course.audience.profile if course.audience else None,
-        "difficulty": course.difficulty.level if course.difficulty else None,
-        "learning_outcomes": list(course.learning_outcomes),
-        "source_topic": course.source_topic,
-        "course_version": course.version,
-        "generation_iteration": course.generation_iteration,
-        "modules": [
-            {
-                "id": str(m.id),
-                "title": m.title,
-                "order": m.order,
-                "module_index": m.module_index,
-                "sections_count": m.sections_count,
-                "blocks_count": m.blocks_count,
-                "sections": [
-                    {
-                        "id": str(s.id),
-                        "title": s.title,
-                        "order": s.order,
-                        "section_index": s.section_index,
-                        "blocks_count": s.blocks_count,
-                        "parent_module_id": str(s.parent_module_id) if s.parent_module_id else None,
-                        "learning_objectives": list(s.learning_objectives),
-                        "blocks": [
-                            {
-                                "id": str(b.id),
-                                "type": b.type,
-                                "order": b.order,
-                                "block_index": b.block_index,
-                                "parent_section_id": str(b.parent_section_id) if b.parent_section_id else None,
-                                "parent_module_id": str(b.parent_module_id) if b.parent_module_id else None,
-                                "content": b.content,
-                            }
-                            for b in s.blocks
-                        ],
-                    }
-                    for s in m.sections
-                ],
-            }
-            for m in course.modules
-        ],
-        "evaluation": {
-            "overall_score": report.overall_score,
-            "passed": report.passed,
-        },
-        "iterations": iteration,
+def _course_to_dict(course, report, iteration, request: GenerationRequestDTO | None = None):
+
+    settings = get_settings()
+    contract = create_contract(
+        course, job_id=str(course.id), provider=settings.llm_provider,
+        model=settings.model or "gpt-4",
+    )
+    contract.generation.completed_at = datetime.now(timezone.utc).isoformat()
+    max_iter = request.max_iterations if request is not None else 3
+    contract.generation.refinement = RefinementDTO(
+        iterations=iteration, max_iterations=max_iter, termination_reason="cli_run",
+    )
+    rubric_dict = {
+        f: float(getattr(report.rubric, f, 0.0) or 0.0)
+        for f in (
+            "accuracy", "pedagogical_clarity", "structure_compliance",
+            "depth_appropriateness", "audience_alignment", "consistency", "completeness",
+        )
     }
+    contract.evaluation = EvaluationDTO(
+        overall_score=report.overall_score,
+        passed=report.passed,
+        rubric=RubricScoresDTO(**rubric_dict),
+        iteration_scores=[report.overall_score],
+    )
+    contract.issues = [
+        IssueDTO(
+            id=i.id, severity=i.severity, scope=i.scope, target_id=i.target_id,
+            category=i.category, message=i.message, suggestion=i.suggestion,
+            auto_fixable=i.auto_fixable,
+        ) for i in report.issues
+    ]
+    return contract.model_dump()
 
 
 # ----------------------------------------------- #
@@ -752,11 +746,11 @@ def _build_request_from_args(args: argparse.Namespace) -> GenerationRequestDTO:
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv if argv is not None else sys.argv[1:])
     request = _build_request_from_args(args)
-
     course, report, iteration = run_demo(request, auto=args.auto, verbose=args.verbose)
     if args.json:
         import json as _json
-        print(_json.dumps(_course_to_dict(course, report, iteration)))
+        payload = _course_to_dict(course, report, iteration, request=request)
+        print(_json.dumps(payload))
     return 0
 
 

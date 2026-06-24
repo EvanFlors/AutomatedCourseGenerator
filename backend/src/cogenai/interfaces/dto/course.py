@@ -54,21 +54,24 @@ class CourseDTO(BaseModel):
 
     @classmethod
     def from_domain(cls, course) -> CourseDTO:
+        audience = getattr(course, "audience", None)
+        difficulty = getattr(course, "difficulty", None)
+
         return cls(
             id=str(course.id),
             title=course.title,
             summary=course.summary,
-            language=course.language,
-            version=course.version,
+            language=getattr(course, "language", "en"),
+            version=getattr(course, "version", 1),
             audience=AudienceDTO(
-                profile=course.audience.profile,
-                prerequisites=[],
-            ) if course.audience else None,
+                profile=audience.profile,
+                prerequisites=list(getattr(audience, "prerequisites", []) or []),
+            ) if audience is not None else None,
             learning_outcomes=list(course.learning_outcomes),
             metadata=CourseMetadataDTO(
-                estimated_duration_minutes=course.metadata.estimated_duration_minutes,
-                difficulty=course.difficulty.level if course.difficulty else "beginner",
-                tags=list(course.tags),
+                estimated_duration_minutes=int(getattr(course, "estimated_duration_minutes", 0) or 0),
+                difficulty=difficulty.level if difficulty is not None else "beginner",
+                tags=list(getattr(course, "tags", ())),
             ),
             modules=[
                 ModuleDTO(
@@ -86,7 +89,7 @@ class CourseDTO(BaseModel):
                                     id=str(block.id),
                                     type=block.type,
                                     order=block.order,
-                                    content=block.content,
+                                    content=BlockContentDTO(**dict(block.content or {})),
                                     metadata={
                                         "estimated_time_minutes": block.estimated_time_minutes,
                                         "difficulty": block.difficulty,
