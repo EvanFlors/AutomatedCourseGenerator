@@ -43,7 +43,7 @@ class ContextRefinerAgent(BaseRefiner[ContextRefinerInput, ContextRefinerOutput]
             bundle=bundle,
             issue_text=bundle["issues"],
         )
-        response = self._call_llm_full(user_prompt, self._get_prompt())
+        response = self._call_llm_full(user_prompt, self._get_prompt(), bundle=self._get_prompt_bundle())
         parsed = parse_json_response(response.text, level=self.LEVEL)
         refined_ctx = self._apply(input_data, parsed)
         self._log_execution(input_data, refined_ctx)

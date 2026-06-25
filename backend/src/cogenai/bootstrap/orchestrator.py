@@ -461,6 +461,50 @@ def print_iteration_summary(result: IterationResult, verbose: bool = False) -> N
     print("=" * 50)
 
 
+# Levels that don't require regenerating the structural skeleton or sections.
+# When the only refinements were at these levels, the orchestrator can
+# reuse the prior course and skip the expensive LLM-driven regeneration.
+_SKELETON_PRESERVING_LEVELS = frozenset({"metadata"})
+_SECTION_PRESERVING_LEVELS = frozenset({"metadata", "context"})
+
+
+def _needs_skeleton_regen(
+    prev_result: "IterationResult | None",
+    working_bundle: "CourseBundle | None",
+    last_refined: object | None,
+) -> bool:
+    """Return True iff the iteration must regenerate context + skeleton."""
+    if working_bundle is None:
+        return True
+    if prev_result is not None and not prev_result.evaluation_passed:
+        # Issues remain; assume we may need fresh context/skeleton.
+        return True
+    levels = _applied_levels(last_refined)
+    if not levels:
+        return True
+    return any(level not in _SKELETON_PRESERVING_LEVELS for level in levels)
+
+
+def _needs_section_regen(last_refined: object | None) -> bool:
+    """Return True iff modules/sections were touched in the prior refinement.
+
+    When only metadata/context changed, the prior course's modules are still
+    valid; we can re-evaluate without re-running the LLM agents.
+    """
+    levels = _applied_levels(last_refined)
+    if not levels:
+        return True
+    return any(level not in _SECTION_PRESERVING_LEVELS for level in levels)
+
+
+def _applied_levels(last_refined: object | None) -> frozenset[str]:
+    """Extract the set of refinement levels that were applied last iteration."""
+    if last_refined is None:
+        return frozenset()
+    steps = getattr(last_refined, "steps_applied", ())
+    return frozenset(getattr(s, "level", "") for s in steps if getattr(s, "level", ""))
+
+
 # ----------------------------------------------- #
 # Main orchestration                                #
 # ----------------------------------------------- #
@@ -505,37 +549,43 @@ def run_demo(
     iteration = 0
     prev_result: IterationResult | None = None
     feedback_text = ""
-    feedback_level = "module"
     working_bundle: CourseBundle | None = None
+    last_refined = None  # carries forward to detect which levels were applied
 
     while iteration < max_iter:
         iteration += 1
         logger.info(f"Iteration {iteration}/{max_iter}")
 
-        if working_bundle is not None:
+        needs_skeleton = _needs_skeleton_regen(prev_result, working_bundle, last_refined)
+        if working_bundle is not None and not needs_skeleton:
             context = working_bundle.context
             skeleton = working_bundle.plan
-            if prev_result and not prev_result.evaluation_passed:
-                logger.info("Re-running heavy LLM agents because issues remain")
-                context, skeleton = generate_skeleton(
-                    request, config, llm_provider,
-                    feedback=feedback_text,
-                    prev_issues=prev_result.issues if prev_result else (),
-                )
+            logger.debug("Reusing working_bundle context + skeleton")
         else:
+            if working_bundle is not None and prev_result and not prev_result.evaluation_passed:
+                logger.info("Re-running heavy LLM agents because issues remain")
             context, skeleton = generate_skeleton(
                 request, config, llm_provider,
                 feedback=feedback_text,
                 prev_issues=prev_result.issues if prev_result else (),
             )
-        prereq_report = validate_prerequisites(skeleton, config, llm_provider)
-        all_sections = generate_sections(context, skeleton, request, config, llm_provider)
-        course = build_course(
-            skeleton, all_sections, request,
-            context=context,
-            generation_iteration=iteration,
-        )
-        consistency, report = evaluate_all(course, all_sections, config, llm_provider)
+        # Skip expensive regeneration when the prior refinements only touched
+        # levels that don't change the structural skeleton (e.g. metadata).
+        if working_bundle is not None and not _needs_section_regen(last_refined):
+            logger.debug("Reusing working_course (only metadata/context changed)")
+            course = working_bundle.course
+            all_sections = []
+            prereq_report = validate_prerequisites(skeleton, config, llm_provider)
+            consistency, report = evaluate_all(course, all_sections, config, llm_provider)
+        else:
+            prereq_report = validate_prerequisites(skeleton, config, llm_provider)
+            all_sections = generate_sections(context, skeleton, request, config, llm_provider)
+            course = build_course(
+                skeleton, all_sections, request,
+                context=context,
+                generation_iteration=iteration,
+            )
+            consistency, report = evaluate_all(course, all_sections, config, llm_provider)
 
         logger.info(
             f"Evaluation: score={report.overall_score:.2f}, passed={report.passed}"
@@ -565,9 +615,8 @@ def run_demo(
         if auto:
             request = auto_feedback_decision(request, result)
             feedback_text = "Make the course more comprehensive and engaging."
-            feedback_level = "module"
         else:
-            feedback_text, feedback_level = prompt_feedback(result)
+            feedback_text, _ = prompt_feedback(result)
             if feedback_text == "0":
                 break
 
@@ -584,6 +633,7 @@ def run_demo(
             ),
             token_budget=effective_token_budget,
         )
+        last_refined = refined
         logger.info(
             f"Refinement: applied={len(refined.steps_applied)}, "
             f"skipped={len(refined.steps_skipped)}, "

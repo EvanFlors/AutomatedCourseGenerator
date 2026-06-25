@@ -216,17 +216,22 @@ class BaseRefiner(BaseAgent[Input, Output], Generic[Input, Output]):
         self,
         prompt: str,
         system_prompt: str = "",
+        bundle=None,
     ):
         """Call the LLM and return the full CompletionResponse (incl. usage).
 
         Overrides BaseAgent._call_llm so refiners can record token usage
-        and forward the response object to the helpers.
+        and forward the response object to the helpers. If `bundle` (a
+        `PromptBundle`) carries a schema, it is injected into the system
+        prompt AND passed as `output_schema` for providers that support it.
         """
         from cogenai.domain.value_objects.llm import CompletionRequest
+        final_system = self._build_system_prompt(system_prompt, bundle)
         request = CompletionRequest(
             prompt=prompt,
             model=self.config.model_for(self.name),
-            system_prompt=system_prompt or self.config.system_prompt,
+            system_prompt=final_system,
+            output_schema=bundle.schema if bundle else None,
         )
         return self.llm_provider.complete(request)
 

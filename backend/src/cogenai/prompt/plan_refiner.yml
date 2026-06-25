@@ -27,3 +27,50 @@ system_prompt: |
   }
 user_prompt: |
   Refine {level} (target_id={target_id}).
+schema:
+  type: object
+  additionalProperties: false
+  required: [modules]
+  properties:
+    modules:
+      type: array
+      items:
+        type: object
+        additionalProperties: false
+        required: [title, summary, order]
+        properties:
+          title: {type: string}
+          summary: {type: string}
+          order: {type: integer, minimum: 0}
+          topics:
+            type: array
+            items: {type: string}
+    sections:
+      type: array
+      items:
+        type: object
+        additionalProperties: false
+        required: [title, topic, order, learning_objectives]
+        properties:
+          title: {type: string}
+          topic: {type: string}
+          order: {type: integer, minimum: 0}
+          learning_objectives:
+            type: array
+            items: {type: string}
+    prerequisites:
+      type: array
+      items:
+        type: object
+        additionalProperties: false
+        required: [from_topic, to_topic, type]
+        properties:
+          from_topic: {type: string}
+          to_topic: {type: string}
+          type:
+            type: string
+            enum: [requires, builds_on, enables]
+    issues_addressed:
+      type: array
+      items: {type: string}
+    notes: {type: string}

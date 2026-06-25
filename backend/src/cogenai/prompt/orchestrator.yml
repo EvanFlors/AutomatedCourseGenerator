@@ -15,3 +15,28 @@ system_prompt: |
 user_prompt: |
   Run refinement plan: {plan_summary}
   Apply each step to its target. Return the refined bundle.
+schema:
+  type: object
+  additionalProperties: false
+  description: "Contract for the orchestrator's planning output (documentation only; the runtime planner is deterministic in Python)."
+  required: [rationale, steps]
+  properties:
+    rationale: {type: string}
+    steps:
+      type: array
+      items:
+        type: object
+        additionalProperties: false
+        required: [step_id, level, target_id, issue_ids]
+        properties:
+          step_id: {type: integer, minimum: 1}
+          level:
+            type: string
+            enum: [context, metadata, prerequisites, plan, module, section, block]
+          target_id: {type: string}
+          issue_ids:
+            type: array
+            items: {type: string}
+          depends_on:
+            type: array
+            items: {type: integer}

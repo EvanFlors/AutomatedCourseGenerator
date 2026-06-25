@@ -11,3 +11,47 @@ user_prompt: |
   Outcomes: {outcomes}
   {constraints}
   Return JSON with modules, sections, and prerequisites arrays.
+schema:
+  type: object
+  additionalProperties: false
+  required: [modules, sections, prerequisites]
+  properties:
+    modules:
+      type: array
+      items:
+        type: object
+        additionalProperties: false
+        required: [title, summary, order]
+        properties:
+          title: {type: string}
+          summary: {type: string}
+          order: {type: integer, minimum: 0}
+          topics:
+            type: array
+            items: {type: string}
+    sections:
+      type: array
+      items:
+        type: object
+        additionalProperties: false
+        required: [title, topic, order, learning_objectives]
+        properties:
+          title: {type: string}
+          topic: {type: string}
+          order: {type: integer, minimum: 0}
+          learning_objectives:
+            type: array
+            minItems: 1
+            items: {type: string}
+    prerequisites:
+      type: array
+      items:
+        type: object
+        additionalProperties: false
+        required: [from_topic, to_topic, type]
+        properties:
+          from_topic: {type: string}
+          to_topic: {type: string}
+          type:
+            type: string
+            enum: [requires, builds_on, enables]

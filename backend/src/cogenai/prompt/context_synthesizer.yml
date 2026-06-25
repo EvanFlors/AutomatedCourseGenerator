@@ -13,3 +13,27 @@ user_prompt: |
   Outcomes: {outcomes}
   Instructions: {instructions}
   Return JSON with all fields.
+schema:
+  type: object
+  additionalProperties: false
+  required: [topic, audience, difficulty, learning_outcomes]
+  properties:
+    topic: {type: string, minLength: 1}
+    audience:
+      type: string
+      enum: [beginner, professional, engineer, architect, manager, researcher, student]
+    difficulty:
+      type: string
+      enum: [beginner, intermediate, advanced, expert]
+    learning_outcomes:
+      type: array
+      minItems: 1
+      items: {type: string}
+    text_instructions: {type: string}
+    documents:
+      type: array
+      items: {type: string}
+    reference_courses:
+      type: array
+      items: {type: string}
+    domain_knowledge: {type: string}

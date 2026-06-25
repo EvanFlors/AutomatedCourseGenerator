@@ -8,3 +8,48 @@ system_prompt: |
 user_prompt: |
   Check consistency across {n_sections} sections ({n_blocks} blocks).
   Identify terminology, ordering, and contradiction issues. Return JSON.
+schema:
+  type: object
+  additionalProperties: false
+  required: [terminology_issues, ordering_issues, contradiction_issues, passed]
+  properties:
+    terminology_issues:
+      type: array
+      items:
+        type: object
+        additionalProperties: false
+        required: [term, occurrences, suggestion]
+        properties:
+          term: {type: string}
+          occurrences:
+            type: array
+            items: {type: string}
+          suggestion: {type: string}
+    ordering_issues:
+      type: array
+      items:
+        type: object
+        additionalProperties: false
+        required: [expected_order, actual_order, items]
+        properties:
+          expected_order:
+            type: array
+            items: {type: string}
+          actual_order:
+            type: array
+            items: {type: string}
+          items:
+            type: array
+            items: {type: string}
+    contradiction_issues:
+      type: array
+      items:
+        type: object
+        additionalProperties: false
+        required: [statement_a, statement_b, location_a, location_b]
+        properties:
+          statement_a: {type: string}
+          statement_b: {type: string}
+          location_a: {type: string}
+          location_b: {type: string}
+    passed: {type: boolean}

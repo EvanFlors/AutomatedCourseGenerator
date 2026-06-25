@@ -75,7 +75,7 @@ class PlanRefinerAgent(BaseRefiner[PlanRefinerInput, PlanRefinerOutput]):
             bundle=bundle,
             issue_text=bundle["issues"],
         )
-        response = self._call_llm_full(user_prompt, self._get_prompt())
+        response = self._call_llm_full(user_prompt, self._get_prompt(), bundle=self._get_prompt_bundle())
         parsed = parse_json_response(response.text, level=self.LEVEL)
         merged_modules, affected_indices = merge_plan(plan, parsed.get("modules", []))
         merged_sections = self._merge_sections(plan, parsed.get("sections", []))

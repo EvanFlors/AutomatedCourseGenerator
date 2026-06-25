@@ -13,3 +13,17 @@ user_prompt: |
   Audience: {audience}, Difficulty: {difficulty}
   Block types: {block_types}
   Return a JSON array of blocks with type and content fields.
+schema:
+  type: array
+  items:
+    type: object
+    additionalProperties: false
+    required: [type, content]
+    properties:
+      type:
+        type: string
+        enum: [concept, example, code, exercise, solution, challenge, quiz, key_points, best_practices, common_mistakes, visual_explanation, analogy, reference]
+      content:
+        type: object
+        description: "Schema depends on `type` (see system_prompt for per-type fields)."
+      order: {type: integer, minimum: 0}

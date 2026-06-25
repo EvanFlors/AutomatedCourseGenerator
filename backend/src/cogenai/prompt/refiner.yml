@@ -10,3 +10,13 @@ user_prompt: |
   Apply refinements based on these issues: {issues}
   User feedback: {feedback}
   Return JSON with issues_addressed, auto_fixed, refinement_notes.
+schema:
+  type: object
+  additionalProperties: false
+  required: [issues_addressed, auto_fixed, refinement_notes]
+  properties:
+    issues_addressed:
+      type: array
+      items: {type: string}
+    auto_fixed: {type: boolean}
+    refinement_notes: {type: string}

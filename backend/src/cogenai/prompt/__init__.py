@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -15,6 +16,10 @@ class PromptBundle:
     description: str
     system_prompt: str
     user_prompt: str
+    schema: dict | None = None
+
+    def has_schema(self) -> bool:
+        return self.schema is not None
 
 
 _PROMPTS: dict[str, dict[str, PromptBundle]] = {}
@@ -42,6 +47,10 @@ def load_prompts(directory: Path | str) -> int:
     """Load all *.yml files from `directory` into the in-memory registry.
 
     Returns the number of prompts loaded. Idempotent: re-loading replaces entries.
+    Each YAML may optionally define a top-level `schema:` mapping that, when
+    present, is exposed via `PromptBundle.schema` and used by agents to
+    constrain the LLM's output (JSON-Schema style or via provider-native
+    `response_schema`).
     """
     path = Path(directory)
     if not path.exists():
@@ -50,12 +59,18 @@ def load_prompts(directory: Path | str) -> int:
     for yml_file in sorted(path.glob("*.yml")):
         with yml_file.open("r", encoding="utf-8") as f:
             data: dict[str, Any] = yaml.safe_load(f) or {}
+        schema = data.get("schema")
+        if schema is not None and not isinstance(schema, dict):
+            raise ValueError(
+                f"{yml_file.name}: 'schema' must be a mapping (got {type(schema).__name__})"
+            )
         bundle = PromptBundle(
             name=str(data.get("name", yml_file.stem)),
             version=str(data.get("version", "1.0.0")),
             description=str(data.get("description", "")),
             system_prompt=str(data.get("system_prompt", "")).strip(),
             user_prompt=str(data.get("user_prompt", "")).strip(),
+            schema=schema,
         )
         _PROMPTS.setdefault(bundle.name, {})[bundle.version] = bundle
         count += 1
@@ -80,3 +95,23 @@ def render_user_prompt(template: str, **kwargs: Any) -> str:
         key = match.group(1)
         return str(kwargs[key]) if key in kwargs else match.group(0)
     return re.sub(r"\{(\w+)\}", _sub, template)
+
+
+def render_schema_instruction(schema: dict) -> str:
+    """Render a JSON Schema as a system-prompt suffix that constrains LLM output.
+
+    Provider-agnostic fallback: works for any LLM that follows system-prompt
+    instructions. Providers with native `response_schema` support (Gemini,
+    OpenAI JSON mode) get the schema via `CompletionRequest.response_schema`
+    directly, but this gives a useful fallback when the provider doesn't.
+    """
+    schema_json = json.dumps(schema, indent=2)
+    return (
+        "\n\nOUTPUT SCHEMA:\n"
+        "Your response MUST be a single valid JSON object that conforms exactly "
+        "to the JSON Schema below. No markdown fences, no commentary, no prose "
+        "outside the JSON.\n"
+        "```json\n"
+        f"{schema_json}\n"
+        "```"
+    )

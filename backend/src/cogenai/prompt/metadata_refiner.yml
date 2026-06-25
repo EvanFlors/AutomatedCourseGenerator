@@ -24,3 +24,20 @@ system_prompt: |
   }
 user_prompt: |
   Refine metadata (target_id={target_id}).
+schema:
+  type: object
+  additionalProperties: false
+  required: [tags, language]
+  properties:
+    tags:
+      type: array
+      minItems: 3
+      maxItems: 5
+      items: {type: string}
+    language:
+      type: string
+      enum: [en, es, fr, de, ja, zh]
+    issues_addressed:
+      type: array
+      items: {type: string}
+    notes: {type: string}

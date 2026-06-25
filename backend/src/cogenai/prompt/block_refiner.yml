@@ -19,3 +19,15 @@ system_prompt: |
   }
 user_prompt: |
   Refine {level} (target_id={target_id}).
+schema:
+  type: object
+  additionalProperties: false
+  required: [content]
+  properties:
+    content:
+      type: object
+      description: "Content payload; structure depends on block.type."
+    issues_addressed:
+      type: array
+      items: {type: string}
+    notes: {type: string}

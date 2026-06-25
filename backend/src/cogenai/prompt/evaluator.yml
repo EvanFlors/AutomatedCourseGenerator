@@ -13,3 +13,41 @@ user_prompt: |
   Outcomes: {outcomes}
   Modules: {modules}
   Score on 7 dimensions and identify issues. Return JSON.
+schema:
+  type: object
+  additionalProperties: false
+  required: [rubric, issues]
+  properties:
+    rubric:
+      type: object
+      additionalProperties: false
+      required: [accuracy, pedagogical_clarity, structure_compliance, depth_appropriateness, audience_alignment, consistency, completeness]
+      properties:
+        accuracy: {type: number, minimum: 0.0, maximum: 1.0}
+        pedagogical_clarity: {type: number, minimum: 0.0, maximum: 1.0}
+        structure_compliance: {type: number, minimum: 0.0, maximum: 1.0}
+        depth_appropriateness: {type: number, minimum: 0.0, maximum: 1.0}
+        audience_alignment: {type: number, minimum: 0.0, maximum: 1.0}
+        consistency: {type: number, minimum: 0.0, maximum: 1.0}
+        completeness: {type: number, minimum: 0.0, maximum: 1.0}
+    issues:
+      type: array
+      items:
+        type: object
+        additionalProperties: false
+        required: [id, severity, scope, target_id, category, message]
+        properties:
+          id: {type: string}
+          severity:
+            type: string
+            enum: [info, warning, error, blocker]
+          scope:
+            type: string
+            enum: [course, module, section, block]
+          target_id: {type: string}
+          category:
+            type: string
+            enum: [factual, pedagogical, structural, style, completeness, consistency, audience_alignment, depth, prerequisite, metadata]
+          message: {type: string}
+          suggestion: {type: string}
+          auto_fixable: {type: boolean}

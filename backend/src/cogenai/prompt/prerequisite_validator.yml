@@ -10,3 +10,34 @@ user_prompt: |
   Modules: {n_modules}, Sections: {n_sections}
   Prerequisites: {n_prereqs}
   Identify missing prerequisites and ordering issues. Return JSON.
+schema:
+  type: object
+  additionalProperties: false
+  required: [missing_prerequisites, ordering_issues, passed]
+  properties:
+    missing_prerequisites:
+      type: array
+      items:
+        type: object
+        additionalProperties: false
+        required: [topic, missing_prerequisite, severity]
+        properties:
+          topic: {type: string}
+          missing_prerequisite: {type: string}
+          severity:
+            type: string
+            enum: [info, warning, error, blocker]
+    ordering_issues:
+      type: array
+      items:
+        type: object
+        additionalProperties: false
+        required: [topic_1, topic_2, issue, severity]
+        properties:
+          topic_1: {type: string}
+          topic_2: {type: string}
+          issue: {type: string}
+          severity:
+            type: string
+            enum: [info, warning, error, blocker]
+    passed: {type: boolean}

@@ -19,3 +19,24 @@ system_prompt: |
   }
 user_prompt: |
   Refine {level} (target_id={target_id}).
+schema:
+  type: object
+  additionalProperties: false
+  required: [prerequisites]
+  properties:
+    prerequisites:
+      type: array
+      items:
+        type: object
+        additionalProperties: false
+        required: [from_topic, to_topic, type]
+        properties:
+          from_topic: {type: string}
+          to_topic: {type: string}
+          type:
+            type: string
+            enum: [requires, builds_on, enables]
+    issues_addressed:
+      type: array
+      items: {type: string}
+    notes: {type: string}

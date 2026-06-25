@@ -37,7 +37,7 @@ class SectionRefinerAgent(BaseRefiner[SectionRefinerInput, SectionRefinerOutput]
             bundle=bundle,
             issue_text=bundle["issues"],
         )
-        response = self._call_llm_full(user_prompt, self._get_prompt())
+        response = self._call_llm_full(user_prompt, self._get_prompt(), bundle=self._get_prompt_bundle())
         parsed = parse_json_response(response.text, level=self.LEVEL)
         validate_fields(parsed, required=("title",), level=self.LEVEL)
         refined = self._apply(input_data, parsed)

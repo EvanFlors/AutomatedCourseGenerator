@@ -9,3 +9,22 @@ user_prompt: |
   Adapt this content to: {audience}
   Strategy: {strategy}
   Return the adapted content.
+schema:
+  type: object
+  additionalProperties: false
+  required: [adapted_blocks, notes]
+  properties:
+    adapted_blocks:
+      type: array
+      items:
+        type: object
+        additionalProperties: false
+        required: [type, content]
+        properties:
+          type:
+            type: string
+            enum: [concept, example, code, exercise, solution, challenge, quiz, key_points, best_practices, common_mistakes, visual_explanation, analogy, reference]
+          content:
+            type: object
+            description: "Adapted block content (structure depends on `type`)."
+    notes: {type: string}
