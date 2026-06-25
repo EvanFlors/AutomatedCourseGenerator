@@ -8,7 +8,7 @@ from cogenai.bootstrap.logging import (
     configure_logging,
     get_logger,
 )
-from cogenai.bootstrap.settings import Settings, get_settings
+from cogenai.bootstrap.settings import Settings, default_token_budget, get_settings
 from cogenai.prompt import load_prompts
 
 # Load YAML prompts at startup. Falls back to in-code if directory missing.

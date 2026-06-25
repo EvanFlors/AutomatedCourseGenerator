@@ -1,6 +1,28 @@
 from __future__ import annotations
 
+import pytest
+
 from cogenai.bootstrap.app import create_app
+
+
+class _StubProvider:
+    def health_check(self) -> bool:
+        return True
+    def complete(self, request):
+        from cogenai.domain.value_objects.llm import CompletionResponse, CompletionUsage
+        return CompletionResponse(
+            text='{"ok": true}', model=request.model,
+            usage=CompletionUsage(0, 0, 0), finish_reason="stop",
+        )
+
+
+@pytest.fixture(autouse=True)
+def _stub(monkeypatch):
+    from cogenai.bootstrap import container
+    from cogenai.bootstrap import orchestrator
+    monkeypatch.setattr(container, "get_llm_provider", lambda: _StubProvider())
+    monkeypatch.setattr(orchestrator, "get_llm_provider", lambda: _StubProvider())
+    yield
 
 
 class TestAppRoutes:

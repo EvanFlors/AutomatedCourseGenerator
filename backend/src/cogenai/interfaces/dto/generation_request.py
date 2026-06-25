@@ -42,6 +42,14 @@ class GenerationRequestDTO(BaseModel):
         None, ge=1_000,
         description="Per-job token cap (input+output). When None, settings.token_budget_input + output is used.",
     )
+    agent_assignments: dict[str, str] | None = Field(
+        None,
+        description="Per-agent-role model overrides (FR-AG-014). Keys are BaseAgent.name values.",
+    )
+
+    def effective_token_budget(self, fallback: int) -> int:
+        """Return the token budget, falling back to `fallback` (e.g., settings default)."""
+        return int(self.token_budget) if self.token_budget is not None else int(fallback)
 
     @field_validator("learning_outcomes", "block_types", mode="before")
     @classmethod

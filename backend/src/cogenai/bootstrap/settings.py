@@ -49,8 +49,17 @@ class Settings(BaseSettings):
     def is_development(self) -> bool:
         return self.app_env == "development"
 
+    def default_token_budget(self) -> int:
+        """Default per-job token budget per ADR-0009 / NFR-COST-001 (input + output)."""
+        return int(self.token_budget_input) + int(self.token_budget_output)
+
 settings = Settings()
 
 
 def get_settings() -> Settings:
     return settings
+
+
+def default_token_budget() -> int:
+    """Module-level helper for callers that don't want to import settings."""
+    return get_settings().default_token_budget()

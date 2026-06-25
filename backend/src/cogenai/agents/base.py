@@ -34,7 +34,7 @@ class BaseAgent(Generic[Input, Output]):
     ) -> str:
         request = CompletionRequest(
             prompt=prompt,
-            model=self.config.model,
+            model=self.config.model_for(self.name),
             system_prompt=system_prompt or self.config.system_prompt,
         )
         response = self.llm_provider.complete(request)

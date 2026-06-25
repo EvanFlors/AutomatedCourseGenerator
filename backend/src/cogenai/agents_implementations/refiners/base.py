@@ -225,7 +225,7 @@ class BaseRefiner(BaseAgent[Input, Output], Generic[Input, Output]):
         from cogenai.domain.value_objects.llm import CompletionRequest
         request = CompletionRequest(
             prompt=prompt,
-            model=self.config.model,
+            model=self.config.model_for(self.name),
             system_prompt=system_prompt or self.config.system_prompt,
         )
         return self.llm_provider.complete(request)
