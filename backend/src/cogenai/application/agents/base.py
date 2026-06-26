@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 from typing import Generic, TypeVar
 
-from cogenai.agents.config import AgentConfig
-from cogenai.bootstrap.logging import get_logger
+from cogenai.application.agents.config import AgentConfig
+from cogenai.shared.logging import get_logger
 from cogenai.domain.ports.llm import LLMProvider
 from cogenai.domain.value_objects.llm import CompletionRequest
 from cogenai.prompt import (

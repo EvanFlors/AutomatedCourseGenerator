@@ -2,29 +2,29 @@ from __future__ import annotations
 
 import pytest
 
-from cogenai.agents.config import AgentConfig
-from cogenai.agents_implementations.context_synthesizer import GenerationContext
-from cogenai.agents_implementations.curriculum_planner import (
+from cogenai.application.agents.config import AgentConfig
+from cogenai.application.orchestrator.context_synthesizer import GenerationContext
+from cogenai.application.orchestrator.curriculum_planner import (
     CourseSkeleton,
     ModuleSpec,
     Prerequisite,
     SectionSpec,
 )
-from cogenai.agents_implementations.refiners.block_refiner import BlockRefinerAgent
-from cogenai.agents_implementations.refiners.context_refiner import ContextRefinerAgent
-from cogenai.agents_implementations.refiners.exceptions import (
+from cogenai.application.orchestrator.refiners.block_refiner import BlockRefinerAgent
+from cogenai.application.orchestrator.refiners.context_refiner import ContextRefinerAgent
+from cogenai.application.orchestrator.refiners.exceptions import (
     RefinerOutputTruncated,
     RefinerSchemaMismatch,
 )
-from cogenai.agents_implementations.refiners.module_refiner import ModuleRefinerAgent
-from cogenai.agents_implementations.refiners.plan_refiner import (
+from cogenai.application.orchestrator.refiners.module_refiner import ModuleRefinerAgent
+from cogenai.application.orchestrator.refiners.plan_refiner import (
     PlanRefinerAgent,
     merge_plan,
 )
-from cogenai.agents_implementations.refiners.prerequisites_refiner import (
+from cogenai.application.orchestrator.refiners.prerequisites_refiner import (
     PrerequisitesRefinerAgent,
 )
-from cogenai.agents_implementations.refiners.section_refiner import SectionRefinerAgent
+from cogenai.application.orchestrator.refiners.section_refiner import SectionRefinerAgent
 from cogenai.domain.course import ContentBlock, Module, Section
 from cogenai.domain.shared.value_objects import (
     new_block_id,

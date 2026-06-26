@@ -3,13 +3,13 @@ from functools import lru_cache
 from typing import TypeVar
 
 # from cogenai.infrastructure.llm.anthropic import AnthropicAdapter
-from cogenai.bootstrap.settings import settings
 from cogenai.domain.ports.llm import LLMProvider
 from cogenai.domain.value_objects.llm import Model
 from cogenai.infrastructure.llm.base import BaseLLMAdapter
 from cogenai.infrastructure.llm.gemini import GeminiAdapter
 from cogenai.infrastructure.llm.openai import OpenAIAdapter
 from cogenai.infrastructure.llm.stub import StubAdapter
+from cogenai.shared.settings import settings
 
 T = TypeVar("T", bound=LLMProvider)
 

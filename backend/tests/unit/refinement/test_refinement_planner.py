@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from cogenai.agents_implementations.refiners.issue_analyzer import IssueAnalyzer
-from cogenai.agents_implementations.refiners.refinement_planner import (
+from cogenai.application.orchestrator.refiners.issue_analyzer import IssueAnalyzer
+from cogenai.application.orchestrator.refiners.refinement_planner import (
     Budget,
     RefinementPlanner,
 )

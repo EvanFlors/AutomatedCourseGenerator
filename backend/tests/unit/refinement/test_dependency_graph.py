@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from cogenai.agents_implementations.refiners.dependency_graph import DependencyGraph
+from cogenai.application.orchestrator.refiners.dependency_graph import DependencyGraph
 from cogenai.domain.course import ContentBlock, Course, Module, Section
 from cogenai.domain.shared.value_objects import (
     new_block_id,

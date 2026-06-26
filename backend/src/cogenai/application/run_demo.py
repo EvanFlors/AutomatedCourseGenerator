@@ -6,35 +6,35 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
-from cogenai.agents.config import AgentAssignmentPolicy, AgentConfig
-from cogenai.agents_implementations.consistency_checker import (
+from cogenai.application.agents.config import AgentAssignmentPolicy, AgentConfig
+from cogenai.application.orchestrator.consistency_checker import (
     ConsistencyCheckerAgent,
     ConsistencyCheckerInput,
 )
-from cogenai.agents_implementations.content_block_generator import (
+from cogenai.application.orchestrator.content_block_generator import (
     ContentBlockGeneratorAgent,
     ContentBlockGeneratorInput,
 )
-from cogenai.agents_implementations.context_synthesizer import (
+from cogenai.application.orchestrator.context_synthesizer import (
     ContextSynthesizerAgent,
     ContextSynthesizerInput,
     GenerationContext,
 )
-from cogenai.agents_implementations.curriculum_planner import (
+from cogenai.application.orchestrator.curriculum_planner import (
     CurriculumPlannerAgent,
     CurriculumPlannerInput,
 )
-from cogenai.agents_implementations.evaluator import EvaluatorAgent, EvaluatorInput
-from cogenai.agents_implementations.persona_adapter import (
+from cogenai.application.orchestrator.evaluator import EvaluatorAgent, EvaluatorInput
+from cogenai.application.orchestrator.persona_adapter import (
     PersonaAdapterAgent,
     PersonaAdapterInput,
 )
-from cogenai.agents_implementations.prerequisite_validator import (
+from cogenai.application.orchestrator.prerequisite_validator import (
     PrerequisiteValidatorAgent,
     PrerequisiteValidatorInput,
 )
-from cogenai.agents_implementations.refiner import CourseBundle, RefinerAgent, RefinerInput
-from cogenai.agents_implementations.refiners import (
+from cogenai.application.orchestrator.refiner import CourseBundle, RefinerAgent, RefinerInput
+from cogenai.application.orchestrator.refiners import (
     BlockRefinerAgent,
     ContextRefinerAgent,
     MetadataRefinerAgent,
@@ -43,13 +43,13 @@ from cogenai.agents_implementations.refiners import (
     PrerequisitesRefinerAgent,
     SectionRefinerAgent,
 )
-from cogenai.agents_implementations.section_author import (
+from cogenai.application.orchestrator.section_author import (
     SectionAuthorAgent,
     SectionAuthorInput,
 )
-from cogenai.bootstrap import default_token_budget, get_settings
-from cogenai.bootstrap.container import get_llm_provider
-from cogenai.bootstrap.logging import configure_logging, get_logger
+from cogenai.shared.settings import default_token_budget, get_settings
+from cogenai.infrastructure.container import get_llm_provider
+from cogenai.shared.logging import configure_logging, get_logger
 from cogenai.domain.course.entities import ContentBlock, Course, Module, Section
 from cogenai.domain.shared.value_objects import new_module_id, new_section_id
 from cogenai.interfaces.dto import create_contract

@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from cogenai.agents_implementations.evaluator import EvaluationIssue
-from cogenai.agents_implementations.refiners.issue_analyzer import IssueAnalysis
-from cogenai.agents_implementations.refiners.base import RefinementLevel
+from cogenai.application.orchestrator.evaluator import EvaluationIssue
+from cogenai.application.orchestrator.refiners.issue_analyzer import IssueAnalysis
+from cogenai.application.orchestrator.refiners.base import RefinementLevel
 
 
 @dataclass(frozen=True)

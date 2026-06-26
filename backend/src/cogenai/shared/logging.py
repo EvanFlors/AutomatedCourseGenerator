@@ -3,7 +3,7 @@ from contextvars import ContextVar
 
 import structlog
 
-from cogenai.bootstrap.settings import settings
+from cogenai.shared.settings import settings
 
 # Correlation IDs for tracing
 request_id_var: ContextVar[str] = ContextVar("request_id", default=None)

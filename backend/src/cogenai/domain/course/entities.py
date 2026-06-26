@@ -21,7 +21,7 @@ from cogenai.domain.shared.value_objects import (
 )
 
 if TYPE_CHECKING:
-    from cogenai.agents_implementations.context_synthesizer import GenerationContext
+    from cogenai.application.orchestrator.context_synthesizer import GenerationContext
 
 BLOCK_TYPES = frozenset({
     "concept", "example", "code", "exercise", "solution",

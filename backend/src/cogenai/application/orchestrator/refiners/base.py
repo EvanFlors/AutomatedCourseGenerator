@@ -5,8 +5,8 @@ import re
 from dataclasses import dataclass, field
 from typing import Generic, Literal, TypeVar
 
-from cogenai.agents.base import BaseAgent
-from cogenai.agents.config import AgentConfig
+from cogenai.application.agents.base import BaseAgent
+from cogenai.application.agents.config import AgentConfig
 from cogenai.domain.course import ContentBlock, Course, Module, Section
 from cogenai.domain.shared.value_objects import BlockId, CourseId, ModuleId, SectionId
 
@@ -43,14 +43,14 @@ class TokenCapExceeded(Exception):
 @dataclass(frozen=True)
 class ContextRefinerInput:
     course_id: CourseId
-    current_context: "cogenai.agents_implementations.context_synthesizer.GenerationContext"
-    issues: tuple["cogenai.agents_implementations.evaluator.EvaluationIssue", ...]
+    current_context: "cogenai.application.orchestrator.context_synthesizer.GenerationContext"
+    issues: tuple["cogenai.application.orchestrator.evaluator.EvaluationIssue", ...]
     user_feedback: str = ""
 
 
 @dataclass(frozen=True)
 class ContextRefinerOutput:
-    context: "cogenai.agents_implementations.context_synthesizer.GenerationContext"
+    context: "cogenai.application.orchestrator.context_synthesizer.GenerationContext"
     issues_addressed: tuple[str, ...] = field(default_factory=tuple)
     refinement_notes: str = ""
     tokens_used: object | None = None
@@ -59,14 +59,14 @@ class ContextRefinerOutput:
 @dataclass(frozen=True)
 class PrerequisitesRefinerInput:
     course_id: CourseId
-    current_prerequisites: tuple["cogenai.agents_implementations.curriculum_planner.Prerequisite", ...]
-    issues: tuple["cogenai.agents_implementations.evaluator.EvaluationIssue", ...]
+    current_prerequisites: tuple["cogenai.application.orchestrator.curriculum_planner.Prerequisite", ...]
+    issues: tuple["cogenai.application.orchestrator.evaluator.EvaluationIssue", ...]
     course_topic: str = ""
 
 
 @dataclass(frozen=True)
 class PrerequisitesRefinerOutput:
-    prerequisites: tuple["cogenai.agents_implementations.curriculum_planner.Prerequisite", ...]
+    prerequisites: tuple["cogenai.application.orchestrator.curriculum_planner.Prerequisite", ...]
     issues_addressed: tuple[str, ...] = field(default_factory=tuple)
     refinement_notes: str = ""
     tokens_used: object | None = None
@@ -75,15 +75,15 @@ class PrerequisitesRefinerOutput:
 @dataclass(frozen=True)
 class PlanRefinerInput:
     course_id: CourseId
-    current_plan: "cogenai.agents_implementations.curriculum_planner.CourseSkeleton"
-    issues: tuple["cogenai.agents_implementations.evaluator.EvaluationIssue", ...]
-    context: "cogenai.agents_implementations.context_synthesizer.GenerationContext"
+    current_plan: "cogenai.application.orchestrator.curriculum_planner.CourseSkeleton"
+    issues: tuple["cogenai.application.orchestrator.evaluator.EvaluationIssue", ...]
+    context: "cogenai.application.orchestrator.context_synthesizer.GenerationContext"
     constraints: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
 class PlanRefinerOutput:
-    plan: "cogenai.agents_implementations.curriculum_planner.CourseSkeleton"
+    plan: "cogenai.application.orchestrator.curriculum_planner.CourseSkeleton"
     affected_module_ids: tuple[int, ...] = field(default_factory=tuple)
     issues_addressed: tuple[str, ...] = field(default_factory=tuple)
     refinement_notes: str = ""
@@ -95,8 +95,8 @@ class ModuleRefinerInput:
     course_id: CourseId
     current_module: Module
     course_outline: tuple[str, ...] = field(default_factory=tuple)
-    issues: tuple["cogenai.agents_implementations.evaluator.EvaluationIssue", ...] = field(default_factory=tuple)
-    context: "cogenai.agents_implementations.context_synthesizer.GenerationContext" | None = None
+    issues: tuple["cogenai.application.orchestrator.evaluator.EvaluationIssue", ...] = field(default_factory=tuple)
+    context: "cogenai.application.orchestrator.context_synthesizer.GenerationContext" | None = None
 
 
 @dataclass(frozen=True)
@@ -112,8 +112,8 @@ class SectionRefinerInput:
     course_id: CourseId
     current_section: Section
     module_outline: tuple[str, ...] = field(default_factory=tuple)
-    issues: tuple["cogenai.agents_implementations.evaluator.EvaluationIssue", ...] = field(default_factory=tuple)
-    context: "cogenai.agents_implementations.context_synthesizer.GenerationContext" | None = None
+    issues: tuple["cogenai.application.orchestrator.evaluator.EvaluationIssue", ...] = field(default_factory=tuple)
+    context: "cogenai.application.orchestrator.context_synthesizer.GenerationContext" | None = None
 
 
 @dataclass(frozen=True)
@@ -129,8 +129,8 @@ class BlockRefinerInput:
     course_id: CourseId
     current_block: ContentBlock
     section_outline: tuple[str, ...] = field(default_factory=tuple)
-    issues: tuple["cogenai.agents_implementations.evaluator.EvaluationIssue", ...] = field(default_factory=tuple)
-    context: "cogenai.agents_implementations.context_synthesizer.GenerationContext" | None = None
+    issues: tuple["cogenai.application.orchestrator.evaluator.EvaluationIssue", ...] = field(default_factory=tuple)
+    context: "cogenai.application.orchestrator.context_synthesizer.GenerationContext" | None = None
 
 
 @dataclass(frozen=True)
@@ -150,7 +150,7 @@ class MetadataRefinerInput:
     topic: str = ""
     audience: str = ""
     difficulty: str = ""
-    issues: tuple["cogenai.agents_implementations.evaluator.EvaluationIssue", ...] = ()
+    issues: tuple["cogenai.application.orchestrator.evaluator.EvaluationIssue", ...] = ()
 
 
 @dataclass(frozen=True)
@@ -165,7 +165,7 @@ class MetadataRefinerOutput:
 
 def parse_json_response(response: str, level: RefinementLevel) -> dict:
     """Match first {...}, parse JSON. Raise RefinerOutputTruncated on failure."""
-    from cogenai.agents_implementations.refiners.exceptions import RefinerOutputTruncated
+    from cogenai.application.orchestrator.refiners.exceptions import RefinerOutputTruncated
 
     match = re.search(r"\{.*\}", response, re.DOTALL)
     if not match:
@@ -192,7 +192,7 @@ def validate_fields(
     level: RefinementLevel,
 ) -> None:
     """Raise RefinerSchemaMismatch if any required field is missing."""
-    from cogenai.agents_implementations.refiners.exceptions import RefinerSchemaMismatch
+    from cogenai.application.orchestrator.refiners.exceptions import RefinerSchemaMismatch
 
     missing = tuple(field for field in required if field not in parsed)
     if missing:

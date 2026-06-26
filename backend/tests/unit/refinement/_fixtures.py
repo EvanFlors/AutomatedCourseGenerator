@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from cogenai.agents_implementations.evaluator import EvaluationIssue
+from cogenai.application.orchestrator.evaluator import EvaluationIssue
 from cogenai.domain.value_objects.llm import CompletionResponse, CompletionUsage, Model
 
 
@@ -146,5 +146,5 @@ class StubProvider:
 
 
 def _config():
-    from cogenai.agents.config import AgentConfig
+    from cogenai.application.agents.config import AgentConfig
     return AgentConfig.default(model_name="stub-model")

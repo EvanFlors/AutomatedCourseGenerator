@@ -1,43 +1,43 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from cogenai.agents.base import BaseAgent
-from cogenai.agents.config import AgentConfig
-from cogenai.agents.context import AgentContext
-from cogenai.agents_implementations.consistency_checker import (
+from cogenai.application.agents.base import BaseAgent
+from cogenai.application.agents.config import AgentConfig
+from cogenai.application.agents.context import AgentContext
+from cogenai.application.orchestrator.consistency_checker import (
     ConsistencyCheckerInput,
     ConsistencyReport,
 )
-from cogenai.agents_implementations.context_synthesizer import (
+from cogenai.application.orchestrator.context_synthesizer import (
     ContextSynthesizerInput,
     GenerationContext,
 )
-from cogenai.agents_implementations.curriculum_planner import (
+from cogenai.application.orchestrator.curriculum_planner import (
     CourseSkeleton,
     CurriculumPlannerInput,
 )
-from cogenai.agents_implementations.evaluator import (
+from cogenai.application.orchestrator.evaluator import (
     EvaluationReport,
     EvaluatorInput,
 )
-from cogenai.agents_implementations.persona_adapter import (
+from cogenai.application.orchestrator.persona_adapter import (
     AdaptedSection,
     PersonaAdapterInput,
 )
-from cogenai.agents_implementations.prerequisite_validator import (
+from cogenai.application.orchestrator.prerequisite_validator import (
     PrerequisiteValidatorInput,
     ProgressionReport,
 )
-from cogenai.agents_implementations.refiner import (
+from cogenai.application.orchestrator.refiner import (
     RefinedDraft,
     RefinerInput,
 )
-from cogenai.agents_implementations.section_author import (
+from cogenai.application.orchestrator.section_author import (
     SectionAuthorInput,
     SectionDraft,
 )
-from cogenai.bootstrap.logging import get_logger
-from cogenai.bootstrap.settings import settings
+from cogenai.shared.logging import get_logger
+from cogenai.shared.settings import settings
 from cogenai.domain.course.entities import Course
 from cogenai.interfaces.dto.contract import JSONOutputContract
 from cogenai.interfaces.dto.course import CourseDTO

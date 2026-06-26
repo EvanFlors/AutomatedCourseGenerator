@@ -2,15 +2,15 @@ from __future__ import annotations
 
 import pytest
 
-from cogenai.agents_implementations.context_synthesizer import GenerationContext
-from cogenai.agents_implementations.curriculum_planner import (
+from cogenai.application.orchestrator.context_synthesizer import GenerationContext
+from cogenai.application.orchestrator.curriculum_planner import (
     CourseSkeleton,
     ModuleSpec,
     Prerequisite,
     SectionSpec,
 )
-from cogenai.agents_implementations.refiners.base import TokenCapExceeded
-from cogenai.agents_implementations.refiners.scope_builder import ScopeBuilder
+from cogenai.application.orchestrator.refiners.base import TokenCapExceeded
+from cogenai.application.orchestrator.refiners.scope_builder import ScopeBuilder
 from cogenai.domain.course import ContentBlock, Course, Module, Section
 from cogenai.domain.shared.value_objects import (
     new_block_id,

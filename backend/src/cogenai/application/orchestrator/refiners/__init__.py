@@ -1,4 +1,4 @@
-from cogenai.agents_implementations.refiners.base import (
+from cogenai.application.orchestrator.refiners.base import (
     BaseRefiner,
     BlockRefinerInput,
     BlockRefinerOutput,
@@ -21,39 +21,39 @@ from cogenai.agents_implementations.refiners.base import (
     parse_json_response,
     validate_fields,
 )
-from cogenai.agents_implementations.refiners.block_refiner import BlockRefinerAgent
-from cogenai.agents_implementations.refiners.context_refiner import ContextRefinerAgent
-from cogenai.agents_implementations.refiners.dependency_graph import DependencyGraph
-from cogenai.agents_implementations.refiners.exceptions import (
+from cogenai.application.orchestrator.refiners.block_refiner import BlockRefinerAgent
+from cogenai.application.orchestrator.refiners.context_refiner import ContextRefinerAgent
+from cogenai.application.orchestrator.refiners.dependency_graph import DependencyGraph
+from cogenai.application.orchestrator.refiners.exceptions import (
     RefinerError,
     RefinerIdMismatch,
     RefinerOutputTruncated,
     RefinerSchemaMismatch,
 )
-from cogenai.agents_implementations.refiners.issue_analyzer import (
+from cogenai.application.orchestrator.refiners.issue_analyzer import (
     IssueAnalysis,
     IssueAnalyzer,
 )
-from cogenai.agents_implementations.refiners.metadata_refiner import (
+from cogenai.application.orchestrator.refiners.metadata_refiner import (
     MetadataRefinerAgent,
     _compute_duration_minutes,
 )
-from cogenai.agents_implementations.refiners.module_refiner import ModuleRefinerAgent
-from cogenai.agents_implementations.refiners.plan_refiner import PlanRefinerAgent
-from cogenai.agents_implementations.refiners.prerequisites_refiner import (
+from cogenai.application.orchestrator.refiners.module_refiner import ModuleRefinerAgent
+from cogenai.application.orchestrator.refiners.plan_refiner import PlanRefinerAgent
+from cogenai.application.orchestrator.refiners.prerequisites_refiner import (
     PrerequisitesRefinerAgent,
 )
-from cogenai.agents_implementations.refiners.refinement_planner import (
+from cogenai.application.orchestrator.refiners.refinement_planner import (
     Budget,
     RefinementPlan,
     RefinementPlanner,
     RefinementStep,
 )
-from cogenai.agents_implementations.refiners.scope_builder import (
+from cogenai.application.orchestrator.refiners.scope_builder import (
     ScopeBuilder,
     ScopeBundle,
 )
-from cogenai.agents_implementations.refiners.section_refiner import SectionRefinerAgent
+from cogenai.application.orchestrator.refiners.section_refiner import SectionRefinerAgent
 
 __all__ = [
     "BaseRefiner",

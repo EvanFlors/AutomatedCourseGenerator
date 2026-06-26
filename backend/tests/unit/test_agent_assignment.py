@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from cogenai.agents.config import AgentAssignmentPolicy, AgentConfig
+from cogenai.application.agents.config import AgentAssignmentPolicy, AgentConfig
 
 
 class TestAgentAssignmentPolicy:

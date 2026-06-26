@@ -2,18 +2,18 @@ from __future__ import annotations
 
 import pytest
 
-from cogenai.agents_implementations.evaluator import (
+from cogenai.application.orchestrator.evaluator import (
     EvaluationIssue,
     EvaluationReport,
     RubricScores,
 )
-from cogenai.agents_implementations.refiner import (
+from cogenai.application.orchestrator.refiner import (
     BudgetExceeded,
     RefinerAgent,
     RefinerInput,
     sum_tokens,
 )
-from cogenai.agents_implementations.refiners import ContextRefinerAgent
+from cogenai.application.orchestrator.refiners import ContextRefinerAgent
 from cogenai.domain.shared.value_objects import new_course_id
 from cogenai.domain.value_objects.llm import CompletionResponse, CompletionUsage
 
@@ -22,7 +22,7 @@ from .test_refiner_orchestrator import FakeCourse, _module
 
 
 def _config():
-    from cogenai.agents.config import AgentConfig
+    from cogenai.application.agents.config import AgentConfig
     return AgentConfig.default(model_name="stub-model")
 
 
@@ -74,8 +74,8 @@ class TestBudgetExhaustion:
                 message="audience is wrong",
             ),),
         )
-        from cogenai.agents_implementations.context_synthesizer import GenerationContext
-        from cogenai.agents_implementations.refiner import CourseBundle
+        from cogenai.application.orchestrator.context_synthesizer import GenerationContext
+        from cogenai.application.orchestrator.refiner import CourseBundle
         bundle = CourseBundle(
             course=FakeCourse(modules=(_module(),)),
             context=GenerationContext(
@@ -107,8 +107,8 @@ class TestBudgetExhaustion:
                 message="audience is wrong",
             ),),
         )
-        from cogenai.agents_implementations.context_synthesizer import GenerationContext
-        from cogenai.agents_implementations.refiner import CourseBundle
+        from cogenai.application.orchestrator.context_synthesizer import GenerationContext
+        from cogenai.application.orchestrator.refiner import CourseBundle
         bundle = CourseBundle(
             course=FakeCourse(modules=(_module(),)),
             context=GenerationContext(

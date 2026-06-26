@@ -4,11 +4,11 @@ import json
 
 import pytest
 
-from cogenai.agents.config import AgentConfig
-from cogenai.agents_implementations.evaluator import (
+from cogenai.application.agents.config import AgentConfig
+from cogenai.application.orchestrator.evaluator import (
     EvaluationIssue,
 )
-from cogenai.agents_implementations.refiners import (
+from cogenai.application.orchestrator.refiners import (
     IssueAnalysis,
     IssueAnalyzer,
     MetadataRefinerAgent,
@@ -16,7 +16,7 @@ from cogenai.agents_implementations.refiners import (
     MetadataRefinerOutput,
     _compute_duration_minutes,
 )
-from cogenai.agents_implementations.refiners.metadata_refiner import (
+from cogenai.application.orchestrator.refiners.metadata_refiner import (
     MIN_TAGS, MAX_TAGS,
 )
 from cogenai.domain.course import ContentBlock, Course, Module, Section

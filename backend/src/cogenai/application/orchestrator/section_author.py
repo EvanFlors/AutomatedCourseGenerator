@@ -2,11 +2,11 @@ from dataclasses import dataclass, field
 import json
 import re
 
-from cogenai.agents.base import BaseAgent
-from cogenai.agents.config import AgentConfig
-from cogenai.agents_implementations.context_synthesizer import GenerationContext
-from cogenai.agents_implementations.curriculum_planner import CourseSkeleton, SectionSpec
-from cogenai.bootstrap.logging import get_logger
+from cogenai.application.agents.base import BaseAgent
+from cogenai.application.agents.config import AgentConfig
+from cogenai.application.orchestrator.context_synthesizer import GenerationContext
+from cogenai.application.orchestrator.curriculum_planner import CourseSkeleton, SectionSpec
+from cogenai.shared.logging import get_logger
 from cogenai.domain.course import ContentBlock
 from cogenai.domain.ports.llm import LLMProvider
 from cogenai.domain.shared.value_objects import new_block_id

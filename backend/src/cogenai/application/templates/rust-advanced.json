@@ -1,0 +1,12 @@
+{
+  "name": "rust-advanced",
+  "description": "Advanced Rust course for experienced engineers.",
+  "topic": "Rust",
+  "audience": "engineer",
+  "difficulty": "advanced",
+  "learning_outcomes": ["Ownership", "Borrowing", "Async", "Macros", "Trait Objects"],
+  "block_types": ["concept", "code", "exercise", "common_mistakes"],
+  "strategy": "example_driven",
+  "num_modules": 5,
+  "sections_per_module": 3
+}

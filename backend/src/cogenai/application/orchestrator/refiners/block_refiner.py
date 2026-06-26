@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from cogenai.agents.config import AgentConfig
-from cogenai.agents_implementations.refiners.base import (
+from cogenai.application.agents.config import AgentConfig
+from cogenai.application.orchestrator.refiners.base import (
     BaseRefiner,
     BlockRefinerInput,
     BlockRefinerOutput,

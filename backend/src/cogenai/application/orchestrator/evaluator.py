@@ -2,9 +2,9 @@ import json
 import re
 from dataclasses import dataclass, field
 
-from cogenai.agents.base import BaseAgent
-from cogenai.agents.config import AgentConfig
-from cogenai.bootstrap.logging import get_logger
+from cogenai.application.agents.base import BaseAgent
+from cogenai.application.agents.config import AgentConfig
+from cogenai.shared.logging import get_logger
 from cogenai.domain.course import Course
 
 logger = get_logger(__name__)

@@ -30,6 +30,15 @@ class JobStatus(str, Enum):
     ABORTED = "aborted"
 
 
+# Terminal statuses (no further transitions allowed)
+TERMINAL_STATUSES = frozenset({
+    JobStatus.COMPLETED,
+    JobStatus.FAILED,
+    JobStatus.PARTIAL,
+    JobStatus.ABORTED,
+})
+
+
 class TerminationReason(str, Enum):
     QUALITY_THRESHOLD = "quality_threshold"
     MAX_ITERATIONS = "max_iterations"
@@ -78,6 +87,8 @@ class JobStoreProtocol(Protocol):
     def update(self, job_id: str, **fields: Any) -> GenerationJob: ...
     def list_ids(self) -> list[str]: ...
     def clear(self) -> None: ...
+    def cancel(self, job_id: str) -> GenerationJob | None: ...
+    def is_terminal(self, job_id: str) -> bool: ...
 
 
 class JobStore:
@@ -118,6 +129,30 @@ class JobStore:
                     raise AttributeError(f"GenerationJob has no field {key!r}")
                 setattr(job, key, value)
             return job
+
+    def cancel(self, job_id: str) -> GenerationJob | None:
+        """Mark a non-terminal job as ABORTED. Returns the updated job, or None.
+
+        Returns None if the job is already in a terminal state (no-op).
+        Returns None if the job_id is unknown.
+        """
+        with self._lock:
+            job = self._jobs.get(job_id)
+            if job is None:
+                return None
+            if job.status in TERMINAL_STATUSES:
+                return None
+            job.status = JobStatus.ABORTED
+            job.completed_at = datetime.now(timezone.utc).isoformat()
+            job.termination_reason = TerminationReason.USER_ABORTED.value
+            return job
+
+    def is_terminal(self, job_id: str) -> bool:
+        with self._lock:
+            job = self._jobs.get(job_id)
+            if job is None:
+                return False
+            return job.status in TERMINAL_STATUSES
 
     def list_ids(self) -> list[str]:
         with self._lock:
@@ -292,6 +327,49 @@ def set_job_store(store: JobStoreProtocol) -> None:
     """Replace the process-wide JobStore (used by tests and app bootstrap)."""
     global _store
     _store = store
+
+
+# ----------------------------- Event bus -----------------------------
+
+class JobEventBus:
+    """In-process pub/sub of job state transitions.
+
+    Subscribers register a callback and receive a copy of the GenerationJob
+    after every status change. Used by the WebSocket endpoint to push
+    real-time updates to clients without polling.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._subscribers: dict[str, list] = {}
+
+    def subscribe(self, job_id: str, callback) -> None:
+        with self._lock:
+            self._subscribers.setdefault(job_id, []).append(callback)
+
+    def unsubscribe(self, job_id: str, callback) -> None:
+        with self._lock:
+            callbacks = self._subscribers.get(job_id, [])
+            if callback in callbacks:
+                callbacks.remove(callback)
+            if not callbacks:
+                self._subscribers.pop(job_id, None)
+
+    def publish(self, job: GenerationJob) -> None:
+        with self._lock:
+            callbacks = list(self._subscribers.get(job.job_id, ()))
+        for cb in callbacks:
+            try:
+                cb(job)
+            except Exception:
+                pass
+
+
+_event_bus = JobEventBus()
+
+
+def get_event_bus() -> JobEventBus:
+    return _event_bus
 
 
 def make_job_store(backend: str = "memory", db_path: str | None = None) -> JobStoreProtocol:

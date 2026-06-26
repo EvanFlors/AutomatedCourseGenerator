@@ -3,15 +3,15 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from typing import Any
 
-from cogenai.agents.base import BaseAgent
-from cogenai.agents.config import AgentConfig
-from cogenai.agents_implementations.context_synthesizer import GenerationContext
-from cogenai.agents_implementations.curriculum_planner import (
+from cogenai.application.agents.base import BaseAgent
+from cogenai.application.agents.config import AgentConfig
+from cogenai.application.orchestrator.context_synthesizer import GenerationContext
+from cogenai.application.orchestrator.curriculum_planner import (
     CourseSkeleton,
     Prerequisite,
 )
-from cogenai.agents_implementations.evaluator import EvaluationIssue, EvaluationReport
-from cogenai.agents_implementations.refiners import (
+from cogenai.application.orchestrator.evaluator import EvaluationIssue, EvaluationReport
+from cogenai.application.orchestrator.refiners import (
     BlockRefinerInput,
     ContextRefinerInput,
     IssueAnalyzer,
@@ -24,7 +24,7 @@ from cogenai.agents_implementations.refiners import (
     RefinerError,
     SectionRefinerInput,
 )
-from cogenai.bootstrap.logging import get_logger
+from cogenai.shared.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -293,7 +293,7 @@ class RefinerAgent(BaseAgent[RefinerInput, RefinedDraft]):
         input_data: RefinerInput,
         step_issues: tuple[EvaluationIssue, ...],
     ) -> Any:
-        from cogenai.agents_implementations.refiners.metadata_refiner import (
+        from cogenai.application.orchestrator.refiners.metadata_refiner import (
             _compute_duration_minutes,
         )
         course = input_data.course
@@ -530,7 +530,7 @@ class RefinerAgent(BaseAgent[RefinerInput, RefinedDraft]):
                 reason="input_data.course is a bare Course without a CourseBundle wrapper",
             )
             return course
-        from cogenai.agents_implementations.refiners.metadata_refiner import (
+        from cogenai.application.orchestrator.refiners.metadata_refiner import (
             MetadataRefinerOutput,
         )
         if not isinstance(artifact, MetadataRefinerOutput):

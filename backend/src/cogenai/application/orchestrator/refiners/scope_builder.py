@@ -3,8 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from cogenai.agents_implementations.evaluator import EvaluationIssue
-from cogenai.agents_implementations.refiners.base import (
+from cogenai.application.orchestrator.evaluator import EvaluationIssue
+from cogenai.application.orchestrator.refiners.base import (
     RefinementLevel,
     RefinementScope,
     TokenCapExceeded,

@@ -2,10 +2,10 @@ from dataclasses import dataclass, field
 import json
 import re
 
-from cogenai.agents.base import BaseAgent
-from cogenai.agents.config import AgentConfig
-from cogenai.agents_implementations.persona_adapter import AdaptedSection
-from cogenai.bootstrap.logging import get_logger
+from cogenai.application.agents.base import BaseAgent
+from cogenai.application.agents.config import AgentConfig
+from cogenai.application.orchestrator.persona_adapter import AdaptedSection
+from cogenai.shared.logging import get_logger
 from cogenai.domain.course import ContentBlock
 
 logger = get_logger(__name__)

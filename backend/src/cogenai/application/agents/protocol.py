@@ -1,6 +1,6 @@
 from typing import Protocol, TypeVar
 
-from cogenai.agents.config import AgentConfig
+from cogenai.application.agents.config import AgentConfig
 
 Input = TypeVar("Input")
 Output = TypeVar("Output")

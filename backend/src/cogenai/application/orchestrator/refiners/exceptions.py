@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from cogenai.agents_implementations.refiners.base import RefinementLevel
+from cogenai.application.orchestrator.refiners.base import RefinementLevel
 
 
 class RefinerError(Exception):

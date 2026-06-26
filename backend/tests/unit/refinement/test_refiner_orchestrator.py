@@ -2,26 +2,26 @@ from __future__ import annotations
 
 import pytest
 
-from cogenai.agents.config import AgentConfig
-from cogenai.agents_implementations.context_synthesizer import GenerationContext
-from cogenai.agents_implementations.curriculum_planner import (
+from cogenai.application.agents.config import AgentConfig
+from cogenai.application.orchestrator.context_synthesizer import GenerationContext
+from cogenai.application.orchestrator.curriculum_planner import (
     CourseSkeleton,
     ModuleSpec,
     Prerequisite,
     SectionSpec,
 )
-from cogenai.agents_implementations.evaluator import (
+from cogenai.application.orchestrator.evaluator import (
     EvaluationIssue,
     EvaluationReport,
     RubricScores,
 )
-from cogenai.agents_implementations.refiner import (
+from cogenai.application.orchestrator.refiner import (
     RefinedDraft,
     RefinementStepResult,
     RefinerAgent,
     RefinerInput,
 )
-from cogenai.agents_implementations.refiners import (
+from cogenai.application.orchestrator.refiners import (
     BlockRefinerAgent,
     ContextRefinerAgent,
     IssueAnalyzer,
@@ -293,7 +293,7 @@ class TestRefinerOrchestratorDispatch:
 class TestRefinerOrchestratorErrorHandling:
 
     def test_orchestrator_handles_refiner_truncation_error(self):
-        from cogenai.agents_implementations.refiners import RefinerOutputTruncated
+        from cogenai.application.orchestrator.refiners import RefinerOutputTruncated
         bad_refiner = BlockRefinerAgent(
             _config(), FakeProvider(returns="not json at all")
         )
@@ -502,7 +502,7 @@ class TestRefinerOrchestratorIntegration:
 
     def test_cascade_dependencies_respected_in_plan(self):
         analyzer = IssueAnalyzer()
-        from cogenai.agents_implementations.evaluator import EvaluationIssue
+        from cogenai.application.orchestrator.evaluator import EvaluationIssue
         issues = (
             EvaluationIssue(id="i-1", severity="warning", scope="course", target_id="c-1", category="audience_alignment", message="x"),
             EvaluationIssue(id="i-2", severity="warning", scope="module", target_id="m-1", category="completeness", message="x"),
@@ -517,7 +517,7 @@ class TestRefinerOrchestratorIntegration:
 class TestCourseBundle:
 
     def test_bundle_proxies_modules_to_course(self):
-        from cogenai.agents_implementations.refiner import CourseBundle
+        from cogenai.application.orchestrator.refiner import CourseBundle
         module = _module()
         course = FakeCourse(modules=(module,))
         ctx = GenerationContext(
@@ -530,14 +530,14 @@ class TestCourseBundle:
         assert bundle.title == "Course"
 
     def test_bundle_proxies_learning_outcomes(self):
-        from cogenai.agents_implementations.refiner import CourseBundle
+        from cogenai.application.orchestrator.refiner import CourseBundle
         course = FakeCourse(learning_outcomes=("A", "B"))
         bundle = CourseBundle(course=course)
         assert bundle.learning_outcomes == ("A", "B")
 
     def test_orchestrator_runs_context_step_when_bundle_has_context(self):
         from ._fixtures import make_context_response
-        from cogenai.agents_implementations.refiner import CourseBundle
+        from cogenai.application.orchestrator.refiner import CourseBundle
         context_refiner = ContextRefinerAgent(
             _config(), FakeProvider(returns=make_context_response(audience="engineer"))
         )
@@ -561,7 +561,7 @@ class TestCourseBundle:
 
     def test_orchestrator_runs_plan_step_when_bundle_has_plan(self):
         from ._fixtures import make_plan_response
-        from cogenai.agents_implementations.refiner import CourseBundle
+        from cogenai.application.orchestrator.refiner import CourseBundle
         plan_refiner = PlanRefinerAgent(
             _config(), FakeProvider(returns=make_plan_response([]))
         )
@@ -590,7 +590,7 @@ class TestCourseBundle:
 
     def test_orchestrator_runs_prerequisites_step_when_bundle_has_prereqs(self):
         from ._fixtures import make_prereqs_response
-        from cogenai.agents_implementations.refiner import CourseBundle
+        from cogenai.application.orchestrator.refiner import CourseBundle
         prereqs_refiner = PrerequisitesRefinerAgent(
             _config(),
             FakeProvider(
@@ -617,7 +617,7 @@ class TestCourseBundle:
 
     def test_orchestrator_clear_error_when_context_missing(self):
         from ._fixtures import make_context_response
-        from cogenai.agents_implementations.refiner import CourseBundle
+        from cogenai.application.orchestrator.refiner import CourseBundle
         context_refiner = ContextRefinerAgent(
             _config(), FakeProvider(returns=make_context_response())
         )
@@ -647,7 +647,7 @@ class TestCourseBundle:
             make_prereqs_response,
             make_section_response,
         )
-        from cogenai.agents_implementations.refiner import CourseBundle
+        from cogenai.application.orchestrator.refiner import CourseBundle
 
         refiners = {
             "block": BlockRefinerAgent(
@@ -734,7 +734,7 @@ class TestOrchestratorAppliesArtifacts:
 
     def test_context_artifact_applied_to_bundle(self):
         from ._fixtures import make_context_response
-        from cogenai.agents_implementations.refiner import CourseBundle
+        from cogenai.application.orchestrator.refiner import CourseBundle
         new_ctx = GenerationContext(
             topic="Python", audience="engineer", difficulty="advanced",
             learning_outcomes=("Functions",),
@@ -762,7 +762,7 @@ class TestOrchestratorAppliesArtifacts:
 
     def test_plan_artifact_applied_to_bundle(self):
         from ._fixtures import make_plan_response
-        from cogenai.agents_implementations.refiner import CourseBundle
+        from cogenai.application.orchestrator.refiner import CourseBundle
         plan_refiner = PlanRefinerAgent(
             _config(), FakeProvider(returns=make_plan_response([
                 {"title": "M1", "summary": "", "order": 0},
@@ -798,7 +798,7 @@ class TestOrchestratorAppliesArtifacts:
 
     def test_prerequisites_artifact_applied_to_bundle(self):
         from ._fixtures import make_prereqs_response
-        from cogenai.agents_implementations.refiner import CourseBundle
+        from cogenai.application.orchestrator.refiner import CourseBundle
         prereqs_refiner = PrerequisitesRefinerAgent(
             _config(),
             FakeProvider(
@@ -827,7 +827,7 @@ class TestOrchestratorAppliesArtifacts:
 
     def test_module_artifact_applied_to_course(self):
         from ._fixtures import make_module_response
-        from cogenai.agents_implementations.refiner import CourseBundle
+        from cogenai.application.orchestrator.refiner import CourseBundle
         module_refiner = ModuleRefinerAgent(
             _config(), FakeProvider(returns=make_module_response("New Title", "new summary"))
         )
@@ -851,7 +851,7 @@ class TestOrchestratorAppliesArtifacts:
 
     def test_section_artifact_applied_to_course(self):
         from ._fixtures import make_section_response
-        from cogenai.agents_implementations.refiner import CourseBundle
+        from cogenai.application.orchestrator.refiner import CourseBundle
         section_refiner = SectionRefinerAgent(
             _config(), FakeProvider(returns=make_section_response("Renamed Section", ["LO1", "LO2"]))
         )
@@ -878,7 +878,7 @@ class TestOrchestratorAppliesArtifacts:
 
     def test_block_artifact_applied_to_course(self):
         from ._fixtures import make_block_response
-        from cogenai.agents_implementations.refiner import CourseBundle
+        from cogenai.application.orchestrator.refiner import CourseBundle
         block_refiner = BlockRefinerAgent(
             _config(), FakeProvider(returns=make_block_response({"prompt": "new prompt"}))
         )
@@ -923,7 +923,7 @@ class TestOrchestratorAppliesArtifacts:
 
     def test_revised_differs_from_original_after_refinement(self):
         from ._fixtures import make_module_response
-        from cogenai.agents_implementations.refiner import CourseBundle
+        from cogenai.application.orchestrator.refiner import CourseBundle
         module_refiner = ModuleRefinerAgent(
             _config(), FakeProvider(returns=make_module_response("T", "S"))
         )
@@ -942,7 +942,7 @@ class TestOrchestratorAppliesArtifacts:
 
     def test_unaffected_modules_keep_original_version(self):
         from ._fixtures import make_module_response
-        from cogenai.agents_implementations.refiner import CourseBundle
+        from cogenai.application.orchestrator.refiner import CourseBundle
         module_refiner = ModuleRefinerAgent(
             _config(), FakeProvider(returns=make_module_response("Renamed", "new"))
         )
@@ -966,7 +966,7 @@ class TestOrchestratorAppliesArtifacts:
 
     def test_unaffected_sections_keep_original_version(self):
         from ._fixtures import make_section_response
-        from cogenai.agents_implementations.refiner import CourseBundle
+        from cogenai.application.orchestrator.refiner import CourseBundle
         section_refiner = SectionRefinerAgent(
             _config(), FakeProvider(returns=make_section_response("Renamed", ["LO1"]))
         )
@@ -998,7 +998,7 @@ class TestOrchestratorIterationLoop:
 
     def test_iteration_loop_evaluator_sees_refined_course(self):
         from ._fixtures import make_module_response
-        from cogenai.agents_implementations.refiner import CourseBundle
+        from cogenai.application.orchestrator.refiner import CourseBundle
 
         module_refiner = ModuleRefinerAgent(
             _config(), FakeProvider(returns=make_module_response("Refined Title", "refined summary"))
@@ -1024,7 +1024,7 @@ class TestOrchestratorIterationLoop:
                     finish_reason="stop",
                 )
 
-        from cogenai.agents_implementations.evaluator import EvaluatorAgent, EvaluatorInput
+        from cogenai.application.orchestrator.evaluator import EvaluatorAgent, EvaluatorInput
 
         module = _module()
         original_ctx = GenerationContext(
@@ -1046,8 +1046,8 @@ class TestOrchestratorIterationLoop:
 
     def test_iteration_loop_with_real_evaluator_uses_refined_input(self):
         from ._fixtures import make_module_response
-        from cogenai.agents_implementations.refiner import CourseBundle
-        from cogenai.agents_implementations.evaluator import EvaluatorAgent, EvaluatorInput
+        from cogenai.application.orchestrator.refiner import CourseBundle
+        from cogenai.application.orchestrator.evaluator import EvaluatorAgent, EvaluatorInput
 
         module_refiner = ModuleRefinerAgent(
             _config(), FakeProvider(returns=make_module_response("Python for Beginners", "fixed"))
@@ -1089,7 +1089,7 @@ class TestOrchestratorIterationLoop:
 
     def test_revised_field_is_functionally_distinct_from_original(self):
         from ._fixtures import make_module_response
-        from cogenai.agents_implementations.refiner import CourseBundle
+        from cogenai.application.orchestrator.refiner import CourseBundle
         module_refiner = ModuleRefinerAgent(
             _config(), FakeProvider(returns=make_module_response("Refined", "R"))
         )
@@ -1120,7 +1120,7 @@ class TestContextMetadataSync:
 
     def test_context_refiner_updates_course_title(self):
         from ._fixtures import make_context_response
-        from cogenai.agents_implementations.refiner import CourseBundle
+        from cogenai.application.orchestrator.refiner import CourseBundle
         context_refiner = ContextRefinerAgent(
             _config(), FakeProvider(returns=make_context_response(audience="engineer"))
         )
@@ -1144,7 +1144,7 @@ class TestContextMetadataSync:
 
     def test_context_refiner_updates_course_summary(self):
         from ._fixtures import make_context_response
-        from cogenai.agents_implementations.refiner import CourseBundle
+        from cogenai.application.orchestrator.refiner import CourseBundle
         context_refiner = ContextRefinerAgent(
             _config(),
             FakeProvider(returns=make_context_response(outcomes=("Variables", "Functions", "Loops"))),
@@ -1170,7 +1170,7 @@ class TestContextMetadataSync:
 
     def test_context_refiner_bumps_course_version(self):
         from ._fixtures import make_context_response
-        from cogenai.agents_implementations.refiner import CourseBundle
+        from cogenai.application.orchestrator.refiner import CourseBundle
         context_refiner = ContextRefinerAgent(
             _config(), FakeProvider(returns=make_context_response())
         )
@@ -1195,7 +1195,7 @@ class TestContextMetadataSync:
 
     def test_context_refiner_preserves_modules(self):
         from ._fixtures import make_context_response
-        from cogenai.agents_implementations.refiner import CourseBundle
+        from cogenai.application.orchestrator.refiner import CourseBundle
         context_refiner = ContextRefinerAgent(
             _config(), FakeProvider(returns=make_context_response())
         )
@@ -1221,7 +1221,7 @@ class TestContextMetadataSync:
 
     def test_module_refiner_does_not_touch_metadata(self):
         from ._fixtures import make_module_response
-        from cogenai.agents_implementations.refiner import CourseBundle
+        from cogenai.application.orchestrator.refiner import CourseBundle
         module_refiner = ModuleRefinerAgent(
             _config(), FakeProvider(returns=make_module_response("New Title", "new summary"))
         )
@@ -1243,7 +1243,7 @@ class TestContextMetadataSync:
 
     def test_context_refiner_with_invalid_audience_does_not_crash(self):
         from ._fixtures import make_context_response
-        from cogenai.agents_implementations.refiner import CourseBundle
+        from cogenai.application.orchestrator.refiner import CourseBundle
         context_refiner = ContextRefinerAgent(
             _config(),
             FakeProvider(returns=make_context_response(audience="unicorns", difficulty="mythical")),

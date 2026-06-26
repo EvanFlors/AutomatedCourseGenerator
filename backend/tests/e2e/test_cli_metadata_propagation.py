@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import json
 
-from cogenai.agents.config import AgentConfig
-from cogenai.agents_implementations.context_synthesizer import GenerationContext
-from cogenai.agents_implementations.curriculum_planner import CourseSkeleton, ModuleSpec
-from cogenai.agents_implementations.evaluator import (
+from cogenai.application.agents.config import AgentConfig
+from cogenai.application.orchestrator.context_synthesizer import GenerationContext
+from cogenai.application.orchestrator.curriculum_planner import CourseSkeleton, ModuleSpec
+from cogenai.application.orchestrator.evaluator import (
     EvaluationIssue, EvaluationReport, RubricScores,
 )
-from cogenai.agents_implementations.refiner import CourseBundle, RefinerAgent, RefinerInput
-from cogenai.agents_implementations.refiners import (
+from cogenai.application.orchestrator.refiner import CourseBundle, RefinerAgent, RefinerInput
+from cogenai.application.orchestrator.refiners import (
     ContextRefinerAgent,
     MetadataRefinerAgent,
 )
@@ -229,7 +229,7 @@ class TestCliMetadataPropagation:
     def test_metadata_refiner_computes_duration_deterministically(self):
         """Duration comes from the course structure, not the LLM. The
         refiner just propagates the computed value into the Course."""
-        from cogenai.agents_implementations.refiners import (
+        from cogenai.application.orchestrator.refiners import (
             _compute_duration_minutes,
         )
         bundle = self._bundle(modules=(_module(),))

@@ -1,0 +1,12 @@
+{
+  "name": "python-beginner",
+  "description": "Intro Python course for absolute beginners.",
+  "topic": "Python",
+  "audience": "beginner",
+  "difficulty": "beginner",
+  "learning_outcomes": ["Variables", "Functions", "Loops", "Conditionals"],
+  "block_types": ["concept", "example", "exercise"],
+  "strategy": "fundamental learning",
+  "num_modules": 4,
+  "sections_per_module": 3
+}

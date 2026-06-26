@@ -2,10 +2,10 @@ from dataclasses import dataclass, field
 import json
 import re
 
-from cogenai.agents.base import BaseAgent
-from cogenai.agents.config import AgentConfig
-from cogenai.agents_implementations.section_author import SectionDraft
-from cogenai.bootstrap.logging import get_logger
+from cogenai.application.agents.base import BaseAgent
+from cogenai.application.agents.config import AgentConfig
+from cogenai.application.orchestrator.section_author import SectionDraft
+from cogenai.shared.logging import get_logger
 from cogenai.domain.course import ContentBlock
 from cogenai.domain.shared.value_objects import new_block_id
 

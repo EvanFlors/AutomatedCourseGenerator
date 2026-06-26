@@ -1,7 +1,7 @@
-from cogenai.agents.base import BaseAgent
-from cogenai.agents.config import AgentConfig
-from cogenai.agents.context import AgentContext
-from cogenai.agents.protocol import Agent
+from cogenai.application.agents.base import BaseAgent
+from cogenai.application.agents.config import AgentConfig
+from cogenai.application.agents.context import AgentContext
+from cogenai.application.agents.protocol import Agent
 
 __all__ = [
     "Agent",
