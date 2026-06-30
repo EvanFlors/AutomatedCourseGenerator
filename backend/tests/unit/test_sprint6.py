@@ -19,11 +19,9 @@ class _StubProvider:
 def _stub(monkeypatch):
     from cogenai.application.templates import reset_template_cache
     reset_template_cache()
-    # Patch the symbol in both the canonical location and the bootstrap shim.
+    # Patch the symbol in the canonical location.
     from cogenai.infrastructure import container as canonical_container
-    from cogenai.bootstrap import container as shim_container
     monkeypatch.setattr(canonical_container, "get_llm_provider", lambda: _StubProvider())
-    monkeypatch.setattr(shim_container, "get_llm_provider", lambda: _StubProvider())
     yield
 
 

@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Protocol
+import contextlib
 
 
 class JobStatus(str, Enum):
@@ -89,6 +90,7 @@ class JobStoreProtocol(Protocol):
     def clear(self) -> None: ...
     def cancel(self, job_id: str) -> GenerationJob | None: ...
     def is_terminal(self, job_id: str) -> bool: ...
+    def is_cancelled(self, job_id: str) -> bool: ...
 
 
 class JobStore:
@@ -98,6 +100,10 @@ class JobStore:
         self._lock = threading.Lock()
         self._jobs: dict[str, GenerationJob] = {}
         self._by_request: dict[str, str] = {}
+        # Threading.Event per job: set() when DELETE /v1/jobs/{id} fires.
+        # Background tasks wait on this with a timeout to support prompt
+        # mid-run cancellation.
+        self._cancel_events: dict[str, threading.Event] = {}
 
     def create(self, request_payload: dict[str, Any]) -> GenerationJob:
         request_id = compute_request_id(request_payload)
@@ -145,6 +151,10 @@ class JobStore:
             job.status = JobStatus.ABORTED
             job.completed_at = datetime.now(timezone.utc).isoformat()
             job.termination_reason = TerminationReason.USER_ABORTED.value
+            # Wake up any background task that's polling for cancellation.
+            event = self._cancel_events.get(job_id)
+            if event is not None:
+                event.set()
             return job
 
     def is_terminal(self, job_id: str) -> bool:
@@ -154,6 +164,35 @@ class JobStore:
                 return False
             return job.status in TERMINAL_STATUSES
 
+    def is_cancelled(self, job_id: str) -> bool:
+        """Return True if the job has been cancelled (status=ABORTED)."""
+        return self.is_terminal(job_id) and (
+            self.get(job_id) is not None
+            and self.get(job_id).status == JobStatus.ABORTED
+        )
+
+    def cancel_event(self, job_id: str) -> threading.Event:
+        """Return a threading.Event that fires when the job is cancelled.
+
+        Background tasks call `event.wait(timeout)` between orchestrator
+        steps to support prompt mid-run cancellation.
+        """
+        with self._lock:
+            event = self._cancel_events.get(job_id)
+            if event is None:
+                event = threading.Event()
+                # If the job is already cancelled when the event is created,
+                # mark it set so `.wait()` returns immediately.
+                job = self._jobs.get(job_id)
+                if job is not None and job.status == JobStatus.ABORTED:
+                    event.set()
+                self._cancel_events[job_id] = event
+            return event
+
+    def _gc_cancel_event(self, job_id: str) -> None:
+        with self._lock:
+            self._cancel_events.pop(job_id, None)
+
     def list_ids(self) -> list[str]:
         with self._lock:
             return list(self._jobs.keys())
@@ -162,6 +201,7 @@ class JobStore:
         with self._lock:
             self._jobs.clear()
             self._by_request.clear()
+            self._cancel_events.clear()
 
 
 class SqliteJobStore:
@@ -295,6 +335,21 @@ class SqliteJobStore:
             conn.execute("DELETE FROM jobs")
             conn.commit()
 
+    def is_cancelled(self, job_id: str) -> bool:
+        job = self.get(job_id)
+        return job is not None and job.status == JobStatus.ABORTED
+
+    def cancel_event(self, job_id: str) -> threading.Event:
+        """Polling-based event for SQLite (cross-process not supported).
+
+        For in-memory store, this is a real Event; for SQLite (which may be
+        shared across processes), we approximate by checking is_cancelled().
+        """
+        event = threading.Event()
+        if self.is_cancelled(job_id):
+            event.set()
+        return event
+
 
 def _row_to_job(row: sqlite3.Row) -> GenerationJob:
     payload = json.loads(row["request_payload"]) if row["request_payload"] else {}
@@ -359,10 +414,8 @@ class JobEventBus:
         with self._lock:
             callbacks = list(self._subscribers.get(job.job_id, ()))
         for cb in callbacks:
-            try:
+            with contextlib.suppress(Exception):
                 cb(job)
-            except Exception:
-                pass
 
 
 _event_bus = JobEventBus()

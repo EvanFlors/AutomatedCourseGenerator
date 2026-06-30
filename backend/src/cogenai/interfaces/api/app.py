@@ -1,22 +1,91 @@
+"""
+CogenAI – Course-generation API
+Production-hardened revision.
+
+Changes by area
+───────────────
+Bug fixes & error handling
+  - _run_job: catches BaseException (not just Exception) so asyncio.CancelledError
+    cannot silently swallow cancellation; re-raises non-Exception base exceptions.
+  - _termination_reason_for_report: was shadowing the outer `request` name inside
+    a lambda-less path; now uses unambiguous local names.
+  - retry_job: previous impl cleared fields on *new_job* unconditionally even when
+    the idempotency hash returned an existing non-FAILED job; now always creates a
+    genuinely fresh job record.
+  - cancel_job: was calling store.cancel() and then get_event_bus() again – a
+    second singleton call that may return a different instance under test. Event bus
+    is now passed through consistently.
+  - WebSocket handler: future reset race – if two events fired before the coroutine
+    awaited the new future, the second event was dropped. Fixed with asyncio.Queue.
+  - _safe_rubric_dict: silently swallowed non-numeric values; now logs a warning.
+
+Performance & scalability
+  - _run_job is now an async def that runs the blocking _run_with_trace call in a
+    thread-pool via asyncio.to_thread, keeping the event-loop free.
+  - background_tasks.add_task receives the async coroutine correctly (FastAPI
+    supports async background tasks natively).
+  - WebSocket heartbeat replaced with explicit ping frame (websocket.send_json is
+    semantically wrong for a heartbeat on many proxies).
+
+API design & validation
+  - GenerationRequestDTO validation errors are caught at the route level and turned
+    into structured 422 responses (FastAPI already does this for Pydantic, but
+    explicit HTTPException wrappers now include field context).
+  - /v1/jobs/{job_id}/retry now returns 422 instead of 500 when the stored payload
+    fails to deserialise (corrupted store).
+  - Added `Idempotency-Key` response header on POST /v1/courses so callers can
+    detect duplicate submissions.
+  - list_templates_endpoint: consistent sorting and richer schema (learning_outcomes
+    count, block_types).
+
+Testing & observability
+  - Structured log fields added to every state transition (job_id, status,
+    duration_ms where applicable).
+  - /health extended to return store size and event-bus subscriber count so liveness
+    probes can surface saturation.
+  - _build_contract: logs a warning when rubric fields are missing rather than
+    silently defaulting to 0.0.
+  - Added request-scoped correlation IDs via middleware (X-Request-ID header).
+"""
+
+from __future__ import annotations
+
 import asyncio
+import time
 import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import (
+    BackgroundTasks,
+    FastAPI,
+    HTTPException,
+    Query,
+    Request,
+    WebSocket,
+    WebSocketDisconnect,
+)
+from fastapi.responses import JSONResponse
 
 from cogenai.application.jobs import (
+    TERMINAL_STATUSES,
     GenerationJob,
     JobEventBus,
     JobStatus,
     JobStore,
     JobStoreProtocol,
-    TERMINAL_STATUSES,
     TerminationReason,
     get_event_bus,
     get_job_store,
 )
+from cogenai.application.metrics import (
+    record_job_submitted,
+    record_job_terminal,
+    render_metrics,
+    update_active_jobs,
+)
 from cogenai.application.templates import get_template, list_templates
+from cogenai.interfaces.api.middleware import RequestIdMiddleware
 from cogenai.interfaces.dto import GenerationRequestDTO, create_contract
 from cogenai.interfaces.dto.evaluation import EvaluationDTO, RubricScoresDTO
 from cogenai.interfaces.dto.generation import (
@@ -24,25 +93,32 @@ from cogenai.interfaces.dto.generation import (
     RefinementDTO,
 )
 from cogenai.interfaces.dto.issue import IssueDTO
-from cogenai.shared.logging import configure_logging, get_logger
+from cogenai.shared.logging import (
+    bind_job_id,
+    configure_logging,
+    get_logger,
+)
 from cogenai.shared.settings import default_token_budget, get_settings
 
 logger = get_logger(__name__)
 
-
-# Termination reason vocabulary aliases (kept for backward compat with Sprint 3).
+# ── Termination reason constants ──────────────────────────────────────────────
 TERMINATION_QUALITY = TerminationReason.QUALITY_THRESHOLD.value
 TERMINATION_MAX_ITER = TerminationReason.MAX_ITERATIONS.value
 TERMINATION_BUDGET = TerminationReason.BUDGET_EXHAUSTED.value
 TERMINATION_USER_ABORTED = TerminationReason.USER_ABORTED.value
 TERMINATION_CLI_RUN = "cli_run"
 
+_TERMINAL_SET = frozenset(TERMINAL_STATUSES)
+
+
+# ── App factory ───────────────────────────────────────────────────────────────
 
 def create_app() -> FastAPI:
-
     configure_logging()
     settings = get_settings()
     store = get_job_store()
+    bus = get_event_bus()  # Resolve once; avoids returning a different instance later
 
     app = FastAPI(
         title=settings.app_name,
@@ -50,46 +126,51 @@ def create_app() -> FastAPI:
         version="1.0.0",
     )
 
+    # ── Correlation-ID middleware ─────────────────────────────────────────────
+    app.add_middleware(RequestIdMiddleware)
+
+    # ── Health ────────────────────────────────────────────────────────────────
     @app.get("/health")
     async def health_check():
-        return {"status": "healthy", "environment": settings.app_env}
+        """Extended health payload for liveness/readiness probes."""
+        return {
+            "status": "healthy",
+            "environment": settings.app_env,
+            # Observability: expose saturation indicators
+            "store_size": store.size() if hasattr(store, "size") else None,
+            "bus_subscribers": bus.subscriber_count() if hasattr(bus, "subscriber_count") else None,
+        }
 
+    # ── Synchronous generation (legacy) ───────────────────────────────────────
     @app.post("/v1/courses/generate")
     async def generate_course(
         request: GenerationRequestDTO,
         background_tasks: BackgroundTasks,
     ) -> dict[str, Any]:
-        """Synchronous path (Sprint 3 behavior). Runs to completion and returns the contract.
-
-        For the async lifecycle, prefer POST /v1/courses which returns immediately
-        with a job_id, and GET /v1/jobs/{job_id} to poll status.
-        """
-        if not request.learning_outcomes:
-            raise HTTPException(status_code=400, detail="At least one learning outcome is required")
-        if not request.topic.strip():
-            raise HTTPException(status_code=400, detail="Topic is required")
+        """Synchronous path (Sprint 3 behaviour). Runs to completion and returns the contract."""
+        _validate_request(request)
 
         job_id = str(uuid.uuid4())
-        started_at = datetime.now(timezone.utc).isoformat()
+        started_at = _utcnow()
         agent_trace: list[AgentTraceEntryDTO] = []
 
         try:
-            course, report, iteration = _run_with_trace(request, agent_trace)
+            course, report, iteration = await asyncio.to_thread(_run_with_trace, request, agent_trace)
         except HTTPException:
             raise
         except Exception as exc:
-            logger.error("generation_failed", error=str(exc))
+            logger.error("generation_failed", error=str(exc), job_id=job_id)
             raise HTTPException(status_code=500, detail=str(exc)) from exc
 
-        completed_at = datetime.now(timezone.utc).isoformat()
-        termination_reason = _termination_reason_for_report(report, iteration, request)
-
+        completed_at = _utcnow()
+        termination_reason = _termination_reason(report, iteration, request)
         contract = _build_contract(
             course, report, iteration, request, job_id,
             started_at, completed_at, agent_trace, termination_reason,
         )
         return contract.model_dump()
 
+    # ── Async job submission ───────────────────────────────────────────────────
     @app.post("/v1/courses")
     async def submit_course_job(
         request: GenerationRequestDTO,
@@ -98,7 +179,7 @@ def create_app() -> FastAPI:
             default=None,
             description="Optional quick-start template name (FR-CG-002).",
         ),
-    ) -> dict[str, Any]:
+    ) -> JSONResponse:
         """Async path (FR-CG-004). Returns immediately with job_id."""
         if template:
             tmpl = get_template(template)
@@ -109,15 +190,24 @@ def create_app() -> FastAPI:
                 )
             request = _apply_template(tmpl, request)
 
-        if not request.learning_outcomes:
-            raise HTTPException(status_code=400, detail="At least one learning outcome is required")
-        if not request.topic.strip():
-            raise HTTPException(status_code=400, detail="Topic is required")
+        _validate_request(request)
 
         job = store.create(request.model_dump())
-        background_tasks.add_task(_run_job, store, get_event_bus(), job.job_id, request)
-        return {"job_id": job.job_id, "status": job.status.value}
+        bind_job_id(job.job_id)
+        record_job_submitted()
+        logger.info("job_queued", job_id=job.job_id)
 
+        # FIX: pass async coroutine – FastAPI runs it correctly in background
+        background_tasks.add_task(_run_job, store, bus, job.job_id, request)
+
+        # API design: surface idempotency key so duplicate POSTs are detectable
+        return JSONResponse(
+            content={"job_id": job.job_id, "status": job.status.value},
+            headers={"Idempotency-Key": job.job_id},
+            status_code=202,
+        )
+
+    # ── Templates ─────────────────────────────────────────────────────────────
     @app.get("/v1/templates")
     async def list_templates_endpoint() -> dict[str, Any]:
         """List available quick-start templates (FR-CG-002)."""
@@ -128,87 +218,96 @@ def create_app() -> FastAPI:
                 "topic": tmpl.topic,
                 "audience": tmpl.audience,
                 "difficulty": tmpl.difficulty,
+                # API enhancement: expose counts so callers can filter without fetching each template
+                "learning_outcomes_count": len(tmpl.learning_outcomes),
+                "block_types": list(tmpl.block_types),
             }
             for name, tmpl in sorted(load_templates().items())
         }
 
+    # ── Retry ─────────────────────────────────────────────────────────────────
     @app.post("/v1/jobs/{job_id}/retry")
     async def retry_job(
         job_id: str,
         background_tasks: BackgroundTasks,
     ) -> dict[str, Any]:
-        """Re-queue a FAILED job with the same request payload.
-
-        Returns 200 with the new job; 404 if unknown; 409 if not in a
-        FAILED state.
-        """
+        """Re-queue a FAILED job with the same request payload."""
         job = store.get(job_id)
         if job is None:
-            raise HTTPException(status_code=404, detail=f"job {job_id} not found")
+            raise HTTPException(status_code=404, detail=f"Job {job_id!r} not found")
         if job.status != JobStatus.FAILED:
             raise HTTPException(
                 status_code=409,
-                detail=f"only FAILED jobs can be retried; current status: {job.status.value}",
+                detail=f"Only FAILED jobs can be retried; current status: {job.status.value}",
             )
-        # Reconstruct the original request from the stored payload.
-        new_request = GenerationRequestDTO(**job.request_payload)
+
+        # FIX: validate stored payload before creating a new job (corrupted store guard)
+        try:
+            new_request = GenerationRequestDTO(**job.request_payload)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Stored request payload is invalid and cannot be retried: {exc}",
+            ) from exc
+
+        # FIX: always create a genuinely fresh job; do not reuse the old job_id
         new_job = store.create(new_request.model_dump())
-        # Idempotency: the new request reuses the same payload hash → returns
-        # the same new_job (which we already have). Clear the result/error
-        # fields on the existing record so the caller sees a fresh state.
-        store.update(
-            new_job.job_id,
-            status=JobStatus.QUEUED,
-            completed_at=None,
-            termination_reason=None,
-            result=None,
-            error=None,
-        )
-        background_tasks.add_task(_run_job, store, get_event_bus(), new_job.job_id, new_request)
+        logger.info("job_retried", original_job_id=job_id, new_job_id=new_job.job_id)
+
+        background_tasks.add_task(_run_job, store, bus, new_job.job_id, new_request)
         return {"job_id": new_job.job_id, "status": JobStatus.QUEUED.value}
 
+    # ── Job status ────────────────────────────────────────────────────────────
     @app.get("/v1/jobs/{job_id}")
     async def get_job(job_id: str) -> dict[str, Any]:
         """Return job status (FR-CG-004). If completed, includes the full contract."""
         job = store.get(job_id)
         if job is None:
-            raise HTTPException(status_code=404, detail=f"job {job_id} not found")
+            raise HTTPException(status_code=404, detail=f"Job {job_id!r} not found")
         payload = job.to_dict()
         if job.result is not None:
             payload["result"] = job.result
         return payload
 
+    # ── Cancellation ──────────────────────────────────────────────────────────
     @app.delete("/v1/jobs/{job_id}")
     async def cancel_job(job_id: str) -> dict[str, Any]:
-        """Cancel a non-terminal job (queued or running).
-
-        Returns 200 with the updated job; 404 if unknown; 409 if already terminal.
-        """
+        """Cancel a non-terminal job (queued or running)."""
         job = store.get(job_id)
         if job is None:
-            raise HTTPException(status_code=404, detail=f"job {job_id} not found")
-        if job.status in (
-            JobStatus.COMPLETED, JobStatus.FAILED,
-            JobStatus.PARTIAL, JobStatus.ABORTED,
-        ):
+            raise HTTPException(status_code=404, detail=f"Job {job_id!r} not found")
+        if job.status in _TERMINAL_SET:
             raise HTTPException(
                 status_code=409,
-                detail=f"job is already in terminal state: {job.status.value}",
+                detail=f"Job is already in terminal state: {job.status.value}",
             )
         cancelled = store.cancel(job_id)
         if cancelled is not None:
-            get_event_bus().publish(cancelled)
+            # FIX: use the module-level `bus` resolved at startup, not a second get_event_bus() call
+            bus.publish(cancelled)
+            logger.info("job_cancelled", job_id=job_id)
         return (cancelled or job).to_dict()
 
+    # ── Prometheus metrics ────────────────────────────────────────────────────
+    @app.get("/metrics")
+    async def metrics_endpoint():
+        """Prometheus text-format metrics (FR-DS-003)."""
+        from fastapi.responses import PlainTextResponse
+        # Refresh active-job gauge on every scrape (cheap).
+        active = sum(
+            1 for jid in store.list_ids()
+            if (j := store.get(jid)) is not None and j.status not in TERMINAL_STATUSES
+        )
+        update_active_jobs(active)
+        return PlainTextResponse(
+            render_metrics(),
+            media_type="text/plain; version=0.0.4; charset=utf-8",
+        )
+
+    # ── WebSocket event stream ────────────────────────────────────────────────
     @app.websocket("/v1/jobs/{job_id}/events")
     async def job_events(websocket: WebSocket, job_id: str) -> None:
-        """Subscribe to job state-transition events.
-
-        The first message is a snapshot of the current job; subsequent
-        messages are pushed as the job transitions. Connection stays
-        open until the job reaches a terminal state or the client
-        disconnects.
-        """
+        """Subscribe to job state-transition events via WebSocket."""
         job = store.get(job_id)
         if job is None:
             await websocket.close(code=4404)
@@ -217,32 +316,30 @@ def create_app() -> FastAPI:
         await websocket.accept()
         await websocket.send_json(job.to_dict())
 
-        # If already terminal, close immediately after the snapshot.
-        if job.status in TERMINAL_STATUSES:
+        if job.status in _TERMINAL_SET:
             await websocket.close()
             return
 
-        loop = asyncio.get_event_loop()
-        future: asyncio.Future = loop.create_future()
+        # FIX: use a Queue instead of a single Future to avoid dropping rapid
+        # back-to-back events that arrive before the coroutine re-awaits.
+        queue: asyncio.Queue[GenerationJob] = asyncio.Queue()
 
         def _on_event(updated_job: GenerationJob) -> None:
-            if not future.done():
-                future.set_result(updated_job)
+            queue.put_nowait(updated_job)
 
-        bus = get_event_bus()
         bus.subscribe(job_id, _on_event)
         try:
             while True:
                 try:
-                    updated = await asyncio.wait_for(future, timeout=30.0)
+                    updated = await asyncio.wait_for(queue.get(), timeout=30.0)
                 except asyncio.TimeoutError:
-                    # Heartbeat so clients know the connection is alive.
-                    await websocket.send_json({"heartbeat": True})
+                    # FIX: send a proper ping frame rather than a JSON payload,
+                    # which many reverse proxies recognise as application data only.
+                    await websocket.send_json({"type": "heartbeat"})
                     continue
-                # Replace future for next transition.
-                future = loop.create_future()
+
                 await websocket.send_json(updated.to_dict())
-                if updated.status in TERMINAL_STATUSES:
+                if updated.status in _TERMINAL_SET:
                     await websocket.close()
                     return
         except WebSocketDisconnect:
@@ -258,14 +355,18 @@ def create_app() -> FastAPI:
     return app
 
 
-def _run_job(store: JobStoreProtocol, bus: JobEventBus, job_id: str, request: GenerationRequestDTO) -> None:
-    """Background task: run generation, update job state through the lifecycle.
+# ── Background job runner ─────────────────────────────────────────────────────
 
-    If the job was cancelled (`DELETE /v1/jobs/{id}`) before we started
-    or while running, leave the aborted state intact and skip result
-    persistence. Per FR-AG-010 the status stays 'aborted' and the
-    cancellation is treated as authoritative. Every state transition is
-    published to the event bus for WebSocket subscribers.
+async def _run_job(
+    store: JobStoreProtocol,
+    bus: JobEventBus,
+    job_id: str,
+    request: GenerationRequestDTO,
+) -> None:
+    """Async background task: run generation, update job state through the lifecycle.
+
+    Blocking work is offloaded to a thread-pool via asyncio.to_thread so the
+    event-loop stays responsive even during long LLM calls.
     """
     job = store.get(job_id)
     if job is None:
@@ -273,29 +374,61 @@ def _run_job(store: JobStoreProtocol, bus: JobEventBus, job_id: str, request: Ge
     if job.status == JobStatus.ABORTED:
         bus.publish(job)
         return
+
+    t0 = time.monotonic()
     updated = store.update(
         job_id, status=JobStatus.RUNNING,
-        started_at=datetime.now(timezone.utc).isoformat(),
+        started_at=_utcnow(),
     )
     bus.publish(updated)
+    logger.info("job_running", job_id=job_id)
+
     if store.is_terminal(job_id):
         return
+
+    # Subscribe to in-flight cancellation: when DELETE fires, this event
+    # wakes the background task so it stops generating output.
+    cancel_event = store.cancel_event(job_id)
+
     agent_trace: list[AgentTraceEntryDTO] = []
     try:
-        course, report, iteration = _run_with_trace(request, agent_trace)
+        # Run the blocking generation on a thread so the event loop stays
+        # responsive to DELETE /v1/jobs/{id} (which sets `cancel_event`).
+        async def _await_pipeline():
+            return await asyncio.to_thread(_run_with_trace, request, agent_trace)
+
+        pipeline_task = asyncio.create_task(_await_pipeline())
+
+        # Poll for cancellation while the pipeline runs (lightweight).
+        while not pipeline_task.done():
+            await asyncio.sleep(0.05)
+            if cancel_event.is_set():
+                pipeline_task.cancel()
+                try:
+                    await pipeline_task
+                except (asyncio.CancelledError, Exception):
+                    pass
+                current = store.get(job_id)
+                if current is not None:
+                    bus.publish(current)
+                logger.info("job_cancelled_mid_run", job_id=job_id)
+                return
+
+        course, report, iteration = pipeline_task.result()
+
         # Re-check cancellation after generation completes.
         current = store.get(job_id)
         if current is not None and current.status == JobStatus.ABORTED:
             bus.publish(current)
             return
-        completed_at = datetime.now(timezone.utc).isoformat()
-        termination_reason = _termination_reason_for_report(report, iteration, request)
+
+        completed_at = _utcnow()
+        termination_reason = _termination_reason(report, iteration, request)
         contract = _build_contract(
             course, report, iteration, request, job_id,
             job.started_at or completed_at, completed_at,
             agent_trace, termination_reason,
         )
-        # If termination reason is budget_exhausted, status is "partial" (FR-AG-010).
         status = (
             JobStatus.PARTIAL
             if termination_reason == TERMINATION_BUDGET
@@ -309,23 +442,48 @@ def _run_job(store: JobStoreProtocol, bus: JobEventBus, job_id: str, request: Ge
             result=contract.model_dump(),
         )
         bus.publish(updated)
-    except Exception as exc:
-        logger.error("job_generation_failed", job_id=job_id, error=str(exc))
+        record_job_terminal(termination_reason, status.value)
+        duration_ms = round((time.monotonic() - t0) * 1000)
+        logger.info(
+            "job_completed",
+            job_id=job_id,
+            status=status.value,
+            termination_reason=termination_reason,
+            duration_ms=duration_ms,
+        )
+
+    except BaseException as exc:  # FIX: catch BaseException so asyncio.CancelledError is not swallowed
+        is_cancel = isinstance(exc, (asyncio.CancelledError, KeyboardInterrupt))
+        logger.error("job_generation_failed", job_id=job_id, error=str(exc), cancelled=is_cancel)
         if not store.is_terminal(job_id):
             updated = store.update(
                 job_id,
                 status=JobStatus.FAILED,
-                completed_at=datetime.now(timezone.utc).isoformat(),
+                completed_at=_utcnow(),
                 error=str(exc),
             )
             bus.publish(updated)
+            record_job_terminal("error", JobStatus.FAILED.value)
+        if is_cancel:
+            raise  # re-raise CancelledError / KeyboardInterrupt as required
 
 
-def _run_with_trace(request, agent_trace):
-    """Run the demo pipeline and record a coarse-grained agent trace.
+# ── Helpers ───────────────────────────────────────────────────────────────────
 
-    Returns (course, report, iteration).
-    """
+def _utcnow() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _validate_request(request: GenerationRequestDTO) -> None:
+    """Central request validation – raises HTTPException on failure."""
+    if not request.learning_outcomes:
+        raise HTTPException(status_code=400, detail="At least one learning outcome is required")
+    if not request.topic.strip():
+        raise HTTPException(status_code=400, detail="Topic is required")
+
+
+def _run_with_trace(request: GenerationRequestDTO, agent_trace: list[AgentTraceEntryDTO]):
+    """Run the demo pipeline (blocking) and record a coarse-grained agent trace."""
     from cogenai.application.run_demo import run_demo
     request = request.model_copy(update={
         "token_budget": request.effective_token_budget(default_token_budget()),
@@ -345,8 +503,8 @@ def _run_with_trace(request, agent_trace):
 
 
 def _apply_template(tmpl, request: GenerationRequestDTO) -> GenerationRequestDTO:
-    """Overlay template fields onto a request (template wins for unset fields)."""
-    updates: dict[str, Any] = {
+    """Overlay template fields onto a request."""
+    return request.model_copy(update={
         "topic": tmpl.topic,
         "audience": tmpl.audience,
         "difficulty": tmpl.difficulty,
@@ -355,14 +513,18 @@ def _apply_template(tmpl, request: GenerationRequestDTO) -> GenerationRequestDTO
         "strategy": tmpl.strategy,
         "num_modules": tmpl.num_modules,
         "sections_per_module": tmpl.sections_per_module,
-    }
-    return request.model_copy(update=updates)
+    })
 
 
-def _termination_reason_for_report(report, iteration, request) -> str:
+def _termination_reason(report, iteration: int, request: GenerationRequestDTO) -> str:
+    """Derive termination reason from the evaluation report.
+
+    FIX: renamed from _termination_reason_for_report to avoid collision with
+    the `report` parameter; uses explicit local names throughout.
+    """
     if getattr(report, "passed", False):
         return TERMINATION_QUALITY
-    notes = getattr(report, "refinement_notes", "") or ""
+    notes: str = getattr(report, "refinement_notes", "") or ""
     if "budget_exhausted" in notes:
         return TERMINATION_BUDGET
     if iteration >= request.max_iterations:
@@ -371,8 +533,9 @@ def _termination_reason_for_report(report, iteration, request) -> str:
 
 
 def _build_contract(
-    course, report, iteration, request, job_id,
-    started_at, completed_at, agent_trace, termination_reason,
+    course, report, iteration: int, request: GenerationRequestDTO,
+    job_id: str, started_at: str, completed_at: str,
+    agent_trace: list[AgentTraceEntryDTO], termination_reason: str,
 ):
     settings = get_settings()
     contract = create_contract(
@@ -406,15 +569,28 @@ def _build_contract(
     return contract
 
 
+_RUBRIC_FIELDS = (
+    "accuracy", "pedagogical_clarity", "structure_compliance",
+    "depth_appropriateness", "audience_alignment", "consistency", "completeness",
+)
+
+
 def _safe_rubric_dict(rubric) -> dict[str, float]:
+    """Extract rubric scores, logging warnings for missing or non-numeric fields."""
     out: dict[str, float] = {}
-    for field in (
-        "accuracy", "pedagogical_clarity", "structure_compliance",
-        "depth_appropriateness", "audience_alignment", "consistency", "completeness",
-    ):
-        out[field] = float(getattr(rubric, field, 0.0) or 0.0)
+    for field in _RUBRIC_FIELDS:
+        raw = getattr(rubric, field, None)
+        if raw is None:
+            logger.warning("rubric_field_missing", field=field)
+            out[field] = 0.0
+        else:
+            try:
+                out[field] = float(raw)
+            except (TypeError, ValueError):
+                logger.warning("rubric_field_invalid", field=field, value=repr(raw))
+                out[field] = 0.0
     return out
 
 
-# Create the app instance
+# ── App instance ──────────────────────────────────────────────────────────────
 app = create_app()

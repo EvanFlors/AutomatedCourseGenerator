@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from cogenai.bootstrap.jobs import (
+from cogenai.application.jobs import (
     GenerationJob,
     JobStatus,
     JobStore,

@@ -5,7 +5,7 @@ from typing import Any
 
 import pytest
 
-from cogenai.bootstrap.orchestrator import (
+from cogenai.application.run_demo import (
     _applied_levels,
     _needs_section_regen,
     _needs_skeleton_regen,

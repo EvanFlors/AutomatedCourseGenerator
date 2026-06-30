@@ -5,7 +5,7 @@ import tempfile
 
 import pytest
 
-from cogenai.bootstrap.jobs import (
+from cogenai.application.jobs import (
     GenerationJob,
     JobStatus,
     SqliteJobStore,

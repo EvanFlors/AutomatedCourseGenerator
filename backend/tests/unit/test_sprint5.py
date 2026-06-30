@@ -5,7 +5,7 @@ import time
 
 import pytest
 
-from cogenai.bootstrap.app import create_app
+from cogenai.interfaces.api.app import create_app
 
 
 class _StubProvider:
@@ -29,17 +29,14 @@ class _StubProvider:
 
 @pytest.fixture(autouse=True)
 def _stub(monkeypatch):
-    from cogenai.bootstrap import container
+    from cogenai.infrastructure import container
     monkeypatch.setattr(container, "get_llm_provider", lambda: _StubProvider())
-    import agent
-    if hasattr(agent, "get_llm_provider"):
-        monkeypatch.setattr(agent, "get_llm_provider", lambda: _StubProvider())
     try:
-        from cogenai.bootstrap import orchestrator
-        monkeypatch.setattr(orchestrator, "get_llm_provider", lambda: _StubProvider())
+        from cogenai.application import run_demo
+        monkeypatch.setattr(run_demo, "get_llm_provider", lambda: _StubProvider())
     except ImportError:
         pass
-    from cogenai.bootstrap.jobs import get_job_store
+    from cogenai.application.jobs import get_job_store
     get_job_store().clear()
     yield
 
@@ -59,7 +56,7 @@ class TestCancellationAPI:
         DELETE path directly via the JobStore.
         """
         from fastapi.testclient import TestClient
-        from cogenai.bootstrap.jobs import get_job_store
+        from cogenai.application.jobs import get_job_store
         store = get_job_store()
         # Directly create a queued job (bypasses POST so no background task).
         job = store.create({"topic": "Python", "learning_outcomes": ["x"]})
@@ -70,7 +67,7 @@ class TestCancellationAPI:
 
     def test_delete_aborted_job_returns_409(self):
         from fastapi.testclient import TestClient
-        from cogenai.bootstrap.jobs import get_job_store
+        from cogenai.application.jobs import get_job_store
         store = get_job_store()
         job = store.create({"x": 1})
         client = TestClient(create_app())
@@ -80,7 +77,7 @@ class TestCancellationAPI:
 
     def test_get_after_delete_shows_aborted(self):
         from fastapi.testclient import TestClient
-        from cogenai.bootstrap.jobs import get_job_store
+        from cogenai.application.jobs import get_job_store
         store = get_job_store()
         job = store.create({"x": 1})
         client = TestClient(create_app())
@@ -101,7 +98,7 @@ class TestWebSocketEvents:
 
     def test_websocket_receives_initial_snapshot(self):
         from fastapi.testclient import TestClient
-        from cogenai.bootstrap.jobs import get_job_store
+        from cogenai.application.jobs import get_job_store
         get_job_store().clear()
         client = TestClient(create_app())
         submit = client.post("/v1/courses", json={
@@ -120,7 +117,7 @@ class TestWebSocketEvents:
 
 class TestEventBusIntegration:
     def test_publish_on_cancellation(self):
-        from cogenai.bootstrap.jobs import (
+        from cogenai.application.jobs import (
             GenerationJob, JobEventBus, JobStatus, JobStore, get_event_bus, get_job_store,
         )
         received: list[GenerationJob] = []

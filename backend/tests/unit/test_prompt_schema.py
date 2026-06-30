@@ -8,7 +8,7 @@ import yaml
 
 from cogenai.application.agents.config import AgentConfig
 from cogenai.application.agents.base import BaseAgent
-from cogenai.bootstrap.logging import get_logger
+from cogenai.shared.logging import get_logger
 from cogenai.domain.ports.llm import LLMProvider
 from cogenai.domain.value_objects.llm import CompletionResponse, CompletionUsage
 from cogenai.prompt import (

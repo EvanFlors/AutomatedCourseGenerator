@@ -5,7 +5,7 @@ import tempfile
 
 import pytest
 
-from cogenai.bootstrap.app import create_app
+from cogenai.interfaces.api.app import create_app
 
 
 @pytest.fixture
@@ -30,10 +30,10 @@ class _StubProvider:
 
 @pytest.fixture(autouse=True)
 def _stub(monkeypatch):
-    from cogenai.bootstrap import container
-    from cogenai.bootstrap import orchestrator
+    from cogenai.infrastructure import container
+    from cogenai.application import run_demo
     monkeypatch.setattr(container, "get_llm_provider", lambda: _StubProvider())
-    monkeypatch.setattr(orchestrator, "get_llm_provider", lambda: _StubProvider())
+    monkeypatch.setattr(run_demo, "get_llm_provider", lambda: _StubProvider())
     yield
 
 
@@ -46,7 +46,7 @@ class TestDeleteJob:
 
     def test_delete_terminal_job_returns_409(self):
         from fastapi.testclient import TestClient
-        from cogenai.bootstrap.jobs import JobStatus, get_job_store
+        from cogenai.application.jobs import JobStatus, get_job_store
         store = get_job_store()
         store.clear()
         # Insert a manually-completed job.
@@ -58,7 +58,7 @@ class TestDeleteJob:
 
     def test_delete_aborted_job_returns_409(self):
         from fastapi.testclient import TestClient
-        from cogenai.bootstrap.jobs import JobStatus, get_job_store
+        from cogenai.application.jobs import JobStatus, get_job_store
         store = get_job_store()
         store.clear()
         job = store.create({"x": 1})
@@ -69,7 +69,7 @@ class TestDeleteJob:
 
     def test_delete_queued_job_marks_aborted(self):
         from fastapi.testclient import TestClient
-        from cogenai.bootstrap.jobs import JobStatus, get_job_store
+        from cogenai.application.jobs import JobStatus, get_job_store
         store = get_job_store()
         store.clear()
         job = store.create({"x": 1})
@@ -84,7 +84,7 @@ class TestDeleteJob:
 
     def test_get_after_delete_shows_aborted(self):
         from fastapi.testclient import TestClient
-        from cogenai.bootstrap.jobs import get_job_store
+        from cogenai.application.jobs import get_job_store
         store = get_job_store()
         store.clear()
         job = store.create({"x": 1})
@@ -97,23 +97,23 @@ class TestDeleteJob:
 
 class TestJobStoreFactory:
     def test_make_memory(self):
-        from cogenai.bootstrap.jobs import JobStore, make_job_store
+        from cogenai.application.jobs import JobStore, make_job_store
         store = make_job_store("memory")
         assert isinstance(store, JobStore)
 
     def test_make_sqlite(self, tmp_db):
-        from cogenai.bootstrap.jobs import SqliteJobStore, make_job_store
+        from cogenai.application.jobs import SqliteJobStore, make_job_store
         store = make_job_store("sqlite", db_path=tmp_db)
         assert isinstance(store, SqliteJobStore)
 
     def test_make_unknown_raises(self):
-        from cogenai.bootstrap.jobs import make_job_store
+        from cogenai.application.jobs import make_job_store
         import pytest
         with pytest.raises(ValueError):
             make_job_store("redis")
 
     def test_make_sqlite_without_path_raises(self):
-        from cogenai.bootstrap.jobs import make_job_store
+        from cogenai.application.jobs import make_job_store
         import pytest
         with pytest.raises(ValueError):
             make_job_store("sqlite")

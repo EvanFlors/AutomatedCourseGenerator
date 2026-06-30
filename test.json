@@ -1,0 +1,28 @@
+{
+  "topic": "Low Level Design - LLD",
+  "audience": "engineer",
+  "difficulty": "beginner",
+  "learning_outcomes": [
+      "Object Oriented Programming",
+      "SOLID Principles",
+      "Design Patterns (creational, structural, behavioral)",
+      "Software Modeling",
+      "API Design",
+      "Refactoring",
+      "Domain Modeling",
+      "Dependency Injection",
+      "Error handling",
+      "Code Quality",
+      "Testing-oriented design",
+      "Extensible Architecture"
+  ],
+  "text_instructions": "Cover all aspects from low level design for a better coding experience and understand design patterns, clean code, principles and everything needed for be a good engineer",
+  "strategy": "fundamental learning",
+  "block_types": [
+    "concept",
+    "example",
+    "exercise",
+    "best_practices",
+    "analogy"
+  ]
+}

@@ -3,7 +3,11 @@ from typing import Generic, TypeVar
 
 from cogenai.application.agents.config import AgentConfig
 from cogenai.shared.logging import get_logger
-from cogenai.domain.ports.llm import LLMProvider
+from cogenai.domain.ports.llm import (
+    AgentCancelled,
+    LLMProvider,
+    SupportsCancellation,
+)
 from cogenai.domain.value_objects.llm import CompletionRequest
 from cogenai.prompt import (
     PromptBundle,
@@ -65,8 +69,21 @@ class BaseAgent(Generic[Input, Output]):
             system_prompt=final_system,
             output_schema=bundle.schema if bundle else None,
         )
-        response = self.llm_provider.complete(request)
+        try:
+            response = self.llm_provider.complete(request)
+        except AgentCancelled:
+            logger.warning("agent_call_cancelled", agent=self.name)
+            raise
         return response.text
+
+    def cancel_in_flight(self) -> None:
+        """Cancel any in-flight LLM call for this agent.
+
+        No-op if the underlying provider doesn't support cancellation
+        (see `SupportsCancellation`).
+        """
+        if isinstance(self.llm_provider, SupportsCancellation):
+            self.llm_provider.cancel()
 
     def _log_execution(self, input_data: Input, output: Output) -> None:
         logger.info(

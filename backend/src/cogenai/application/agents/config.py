@@ -35,12 +35,15 @@ class AgentConfig:
     tools: tuple[str, ...] = field(default_factory=tuple)
     max_retries: int = 3
     assignments: AgentAssignmentPolicy = field(default_factory=AgentAssignmentPolicy)
+    timeout_seconds: float = 60.0
 
     def __post_init__(self):
         if self.temperature < 0 or self.temperature > 1:
             raise ValueError("Temperature must be between 0 and 1.")
         if self.max_tokens <= 0:
             raise ValueError("Max tokens must be positive.")
+        if self.timeout_seconds <= 0:
+            raise ValueError("timeout_seconds must be positive.")
 
     def model_for(self, role: str) -> Model:
         """Return the model to use for a given agent role.
@@ -56,6 +59,7 @@ class AgentConfig:
         cls,
         model_name: str = "gemini-2.5-flash",
         assignments: AgentAssignmentPolicy | None = None,
+        timeout_seconds: float = 60.0,
     ) -> AgentConfig:
         policy = assignments or AgentAssignmentPolicy(default_model=model_name)
         return cls(
@@ -63,4 +67,5 @@ class AgentConfig:
             temperature=0.7,
             max_tokens=2048,
             assignments=policy,
+            timeout_seconds=timeout_seconds,
         )
