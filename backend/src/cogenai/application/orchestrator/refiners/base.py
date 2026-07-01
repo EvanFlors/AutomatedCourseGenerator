@@ -46,12 +46,17 @@ class ContextRefinerInput:
     current_context: "cogenai.application.orchestrator.context_synthesizer.GenerationContext"
     issues: tuple["cogenai.application.orchestrator.evaluator.EvaluationIssue", ...]
     user_feedback: str = ""
+    # Full evaluation report (all levels) for richer context.
+    # `issues` above is the level-filtered slice; this is the whole picture.
+    all_issues: tuple["cogenai.application.orchestrator.evaluator.EvaluationIssue", ...] = field(default_factory=tuple)
+    previous_iteration_summary: str = ""
 
 
 @dataclass(frozen=True)
 class ContextRefinerOutput:
     context: "cogenai.application.orchestrator.context_synthesizer.GenerationContext"
     issues_addressed: tuple[str, ...] = field(default_factory=tuple)
+    issues_residual: tuple[str, ...] = field(default_factory=tuple)
     refinement_notes: str = ""
     tokens_used: object | None = None
 
@@ -62,12 +67,15 @@ class PrerequisitesRefinerInput:
     current_prerequisites: tuple["cogenai.application.orchestrator.curriculum_planner.Prerequisite", ...]
     issues: tuple["cogenai.application.orchestrator.evaluator.EvaluationIssue", ...]
     course_topic: str = ""
+    all_issues: tuple["cogenai.application.orchestrator.evaluator.EvaluationIssue", ...] = field(default_factory=tuple)
+    previous_iteration_summary: str = ""
 
 
 @dataclass(frozen=True)
 class PrerequisitesRefinerOutput:
     prerequisites: tuple["cogenai.application.orchestrator.curriculum_planner.Prerequisite", ...]
     issues_addressed: tuple[str, ...] = field(default_factory=tuple)
+    issues_residual: tuple[str, ...] = field(default_factory=tuple)
     refinement_notes: str = ""
     tokens_used: object | None = None
 
@@ -79,6 +87,8 @@ class PlanRefinerInput:
     issues: tuple["cogenai.application.orchestrator.evaluator.EvaluationIssue", ...]
     context: "cogenai.application.orchestrator.context_synthesizer.GenerationContext"
     constraints: tuple[str, ...] = field(default_factory=tuple)
+    all_issues: tuple["cogenai.application.orchestrator.evaluator.EvaluationIssue", ...] = field(default_factory=tuple)
+    previous_iteration_summary: str = ""
 
 
 @dataclass(frozen=True)
@@ -86,6 +96,7 @@ class PlanRefinerOutput:
     plan: "cogenai.application.orchestrator.curriculum_planner.CourseSkeleton"
     affected_module_ids: tuple[int, ...] = field(default_factory=tuple)
     issues_addressed: tuple[str, ...] = field(default_factory=tuple)
+    issues_residual: tuple[str, ...] = field(default_factory=tuple)
     refinement_notes: str = ""
     tokens_used: object | None = None
 
@@ -97,12 +108,15 @@ class ModuleRefinerInput:
     course_outline: tuple[str, ...] = field(default_factory=tuple)
     issues: tuple["cogenai.application.orchestrator.evaluator.EvaluationIssue", ...] = field(default_factory=tuple)
     context: "cogenai.application.orchestrator.context_synthesizer.GenerationContext" | None = None
+    all_issues: tuple["cogenai.application.orchestrator.evaluator.EvaluationIssue", ...] = field(default_factory=tuple)
+    previous_iteration_summary: str = ""
 
 
 @dataclass(frozen=True)
 class ModuleRefinerOutput:
     module: Module
     issues_addressed: tuple[str, ...] = field(default_factory=tuple)
+    issues_residual: tuple[str, ...] = field(default_factory=tuple)
     refinement_notes: str = ""
     tokens_used: object | None = None
 
@@ -114,12 +128,15 @@ class SectionRefinerInput:
     module_outline: tuple[str, ...] = field(default_factory=tuple)
     issues: tuple["cogenai.application.orchestrator.evaluator.EvaluationIssue", ...] = field(default_factory=tuple)
     context: "cogenai.application.orchestrator.context_synthesizer.GenerationContext" | None = None
+    all_issues: tuple["cogenai.application.orchestrator.evaluator.EvaluationIssue", ...] = field(default_factory=tuple)
+    previous_iteration_summary: str = ""
 
 
 @dataclass(frozen=True)
 class SectionRefinerOutput:
     section: Section
     issues_addressed: tuple[str, ...] = field(default_factory=tuple)
+    issues_residual: tuple[str, ...] = field(default_factory=tuple)
     refinement_notes: str = ""
     tokens_used: object | None = None
 
@@ -131,12 +148,15 @@ class BlockRefinerInput:
     section_outline: tuple[str, ...] = field(default_factory=tuple)
     issues: tuple["cogenai.application.orchestrator.evaluator.EvaluationIssue", ...] = field(default_factory=tuple)
     context: "cogenai.application.orchestrator.context_synthesizer.GenerationContext" | None = None
+    all_issues: tuple["cogenai.application.orchestrator.evaluator.EvaluationIssue", ...] = field(default_factory=tuple)
+    previous_iteration_summary: str = ""
 
 
 @dataclass(frozen=True)
 class BlockRefinerOutput:
     block: ContentBlock
     issues_addressed: tuple[str, ...] = field(default_factory=tuple)
+    issues_residual: tuple[str, ...] = field(default_factory=tuple)
     refinement_notes: str = ""
     tokens_used: object | None = None
 

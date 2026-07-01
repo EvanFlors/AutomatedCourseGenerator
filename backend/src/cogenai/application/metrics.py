@@ -99,6 +99,13 @@ def record_job_submitted() -> None:
     get_metrics_registry().inc_counter("cogenai_jobs_total", status="submitted")
 
 
+def record_job_submitted_for(job_id: str) -> None:
+    """Per-job submitted counter (Sprint 12)."""
+    get_metrics_registry().inc_counter(
+        "cogenai_job_submissions_total", job_id=job_id,
+    )
+
+
 def record_job_terminal(termination_reason: str, status: str) -> None:
     """Called when a job transitions to a terminal state."""
     reg = get_metrics_registry()
@@ -112,6 +119,16 @@ def record_job_terminal(termination_reason: str, status: str) -> None:
 def record_tokens_used(tokens: int) -> None:
     if tokens > 0:
         get_metrics_registry().inc_counter("cogenai_tokens_used_total", value=float(tokens))
+
+
+def record_tokens_used_for(job_id: str, tokens: int) -> None:
+    """Per-job token counter (Sprint 12)."""
+    if tokens > 0:
+        get_metrics_registry().inc_counter(
+            "cogenai_job_tokens_used_total",
+            value=float(tokens),
+            job_id=job_id,
+        )
 
 
 def update_active_jobs(active: int) -> None:

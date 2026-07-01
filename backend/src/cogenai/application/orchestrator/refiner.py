@@ -82,6 +82,7 @@ class RefinementStepResult:
     artifact: Any = None
     error: str | None = None
     issues_addressed: tuple[str, ...] = field(default_factory=tuple)
+    issues_residual: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass
@@ -89,6 +90,7 @@ class RefinedDraft:
     original: Any
     revised: Any
     issues_addressed: tuple[str, ...] = field(default_factory=tuple)
+    issues_residual: tuple[str, ...] = field(default_factory=tuple)
     auto_fixed: bool = False
     refinement_notes: str = ""
     steps_applied: tuple[RefinementStep, ...] = field(default_factory=tuple)
@@ -137,6 +139,7 @@ class RefinerAgent(BaseAgent[RefinerInput, RefinedDraft]):
         applied_steps: list[RefinementStep] = []
         skipped_steps: list[RefinementStep] = []
         all_addressed: list[str] = []
+        all_residual: list[str] = []
         course: Any = input_data.course
         tokens_used = 0
         budget_exhausted = False
@@ -170,6 +173,7 @@ class RefinerAgent(BaseAgent[RefinerInput, RefinedDraft]):
             course = self._apply_artifact(course, step.level, result.artifact)
             applied_steps.append(result.step)
             all_addressed.extend(result.issues_addressed)
+            all_residual.extend(result.issues_residual)
 
         notes = plan.rationale
         if budget_exhausted:
@@ -179,6 +183,7 @@ class RefinerAgent(BaseAgent[RefinerInput, RefinedDraft]):
             original=input_data.course,
             revised=course,
             issues_addressed=tuple(all_addressed),
+            issues_residual=tuple(all_residual),
             auto_fixed=bool(applied_steps),
             refinement_notes=notes,
             steps_applied=tuple(applied_steps),
@@ -233,11 +238,22 @@ class RefinerAgent(BaseAgent[RefinerInput, RefinedDraft]):
         step_issues = tuple(i for i in issues if i.id in step.issue_ids)
         try:
             artifact = self._dispatch(refiner, step, input_data, step_issues)
+            # Step-routed issues are addressed by virtue of being processed.
+            # The refiner's `issues_addressed` is informational; we union it
+            # with the routed slice to avoid false "residual" tags.
+            self_reported = tuple(getattr(artifact, "issues_addressed", ()))
+            addressed = tuple(dict.fromkeys((*self_reported, *(i.id for i in step_issues))))
+            # Residual = the full report minus what this step addressed.
+            addressed_ids = set(addressed)
+            residual = tuple(
+                i.id for i in issues if i.id not in addressed_ids
+            )
             return RefinementStepResult(
                 step=step,
                 success=True,
                 artifact=artifact,
-                issues_addressed=tuple(i.id for i in step_issues),
+                issues_addressed=addressed,
+                issues_residual=residual,
             )
         except RefinerError as exc:
             return RefinementStepResult(step=step, success=False, error=str(exc))
@@ -284,6 +300,8 @@ class RefinerAgent(BaseAgent[RefinerInput, RefinedDraft]):
             current_context=ctx,
             issues=step_issues,
             user_feedback=input_data.user_feedback,
+            all_issues=tuple(getattr(input_data.evaluation_report, "issues", ())),
+            previous_iteration_summary=getattr(input_data, "previous_iteration_summary", ""),
         )
         return refiner.run(inp)
 
@@ -308,6 +326,7 @@ class RefinerAgent(BaseAgent[RefinerInput, RefinedDraft]):
             difficulty=str(getattr(ctx, "difficulty", "")) if ctx is not None else "",
             issues=step_issues,
         )
+        # Metadata doesn't currently consume all_issues; pass-through for future use.
         return refiner.run(inp)
 
     def _run_prerequisites(
@@ -328,6 +347,8 @@ class RefinerAgent(BaseAgent[RefinerInput, RefinedDraft]):
             current_prerequisites=tuple(current),
             issues=step_issues,
             course_topic=str(getattr(course, "title", "")),
+            all_issues=tuple(getattr(input_data.evaluation_report, "issues", ())),
+            previous_iteration_summary=getattr(input_data, "previous_iteration_summary", ""),
         )
         return refiner.run(inp)
 
@@ -355,6 +376,8 @@ class RefinerAgent(BaseAgent[RefinerInput, RefinedDraft]):
             issues=step_issues,
             context=ctx,
             constraints=(),
+            all_issues=tuple(getattr(input_data.evaluation_report, "issues", ())),
+            previous_iteration_summary=getattr(input_data, "previous_iteration_summary", ""),
         )
         return refiner.run(inp)
 
@@ -376,6 +399,8 @@ class RefinerAgent(BaseAgent[RefinerInput, RefinedDraft]):
             course_outline=course_outline,
             issues=step_issues,
             context=getattr(course, "context", None),
+            all_issues=tuple(getattr(input_data.evaluation_report, "issues", ())),
+            previous_iteration_summary=getattr(input_data, "previous_iteration_summary", ""),
         )
         return refiner.run(inp)
 
@@ -399,6 +424,8 @@ class RefinerAgent(BaseAgent[RefinerInput, RefinedDraft]):
             module_outline=module_outline,
             issues=step_issues,
             context=getattr(course, "context", None),
+            all_issues=tuple(getattr(input_data.evaluation_report, "issues", ())),
+            previous_iteration_summary=getattr(input_data, "previous_iteration_summary", ""),
         )
         return refiner.run(inp)
 
@@ -422,6 +449,8 @@ class RefinerAgent(BaseAgent[RefinerInput, RefinedDraft]):
             section_outline=section_outline,
             issues=step_issues,
             context=getattr(course, "context", None),
+            all_issues=tuple(getattr(input_data.evaluation_report, "issues", ())),
+            previous_iteration_summary=getattr(input_data, "previous_iteration_summary", ""),
         )
         return refiner.run(inp)
 

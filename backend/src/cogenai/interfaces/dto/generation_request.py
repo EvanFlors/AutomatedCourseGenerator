@@ -28,11 +28,33 @@ class GenerationRequestDTO(BaseModel):
 
     text_instructions: str = ""
     strategy: str = "fundamental learning"
-    block_types: tuple[str, ...] = ("concept", "example", "exercise")
+    block_types: tuple[str, ...] | None = Field(
+        default=None,
+        description=(
+            "Allowed block types for content generation. When None, the LLM "
+            "chooses the most appropriate types from the full taxonomy."
+        ),
+    )
 
-    num_modules: int = Field(1, ge=1, le=20)
-    sections_per_module: int = Field(1, ge=1, le=10)
-    blocks_per_section: int = Field(3, ge=1, le=20)
+    num_modules: int | None = Field(
+        default=None, ge=1, le=20,
+        description=(
+            "Preferred module count. When None, the LLM decides based on "
+            "topic complexity, audience, and outcomes."
+        ),
+    )
+    sections_per_module: int | None = Field(
+        default=None, ge=1, le=10,
+        description=(
+            "Preferred sections per module. When None, the LLM decides."
+        ),
+    )
+    blocks_per_section: int | None = Field(
+        default=None, ge=1, le=20,
+        description=(
+            "Preferred blocks per section. When None, the LLM decides."
+        ),
+    )
 
     max_iterations: int = Field(3, ge=1, le=20)
     max_modules: int | None = Field(None, ge=1, le=20)

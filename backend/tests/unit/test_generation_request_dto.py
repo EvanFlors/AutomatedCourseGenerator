@@ -83,7 +83,7 @@ class TestGenerationRequestDTO:
         r = GenerationRequestDTO(topic="X", learning_outcomes=("A",))
         r2 = r.with_updates(num_modules=3)
         assert r2.num_modules == 3
-        assert r.num_modules == 1
+        assert r.num_modules is None  # LLM-chooses by default
 
     def test_default_factory(self):
         r = GenerationRequestDTO.default()

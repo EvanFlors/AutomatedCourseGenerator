@@ -25,6 +25,7 @@ import contextlib
 class JobStatus(str, Enum):
     QUEUED = "queued"
     RUNNING = "running"
+    WAITING_FOR_INPUT = "waiting_for_input"
     COMPLETED = "completed"
     FAILED = "failed"
     PARTIAL = "partial"
@@ -59,6 +60,12 @@ class GenerationJob:
     termination_reason: str | None = None
     result: dict[str, Any] | None = None
     error: str | None = None
+    # Human-in-the-loop: questions pending answer, and answers received.
+    pending_questions: tuple[dict[str, Any], ...] = field(default_factory=tuple)
+    human_answers: dict[str, str] = field(default_factory=dict)
+    last_thinking: str = ""
+    # Audit trail: one entry per LLMOrchestrator decision (Sprint 11).
+    decision_log: tuple[dict[str, Any], ...] = field(default_factory=tuple)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -71,6 +78,10 @@ class GenerationJob:
             "termination_reason": self.termination_reason,
             "error": self.error,
             "has_result": self.result is not None,
+            "pending_questions": list(self.pending_questions),
+            "human_answers": dict(self.human_answers),
+            "last_thinking": self.last_thinking,
+            "decision_log": list(self.decision_log),
         }
 
 
@@ -91,6 +102,8 @@ class JobStoreProtocol(Protocol):
     def cancel(self, job_id: str) -> GenerationJob | None: ...
     def is_terminal(self, job_id: str) -> bool: ...
     def is_cancelled(self, job_id: str) -> bool: ...
+    def submit_answer(self, job_id: str, answers: dict[str, str]) -> GenerationJob | None: ...
+    def record_decision(self, job_id: str, decision: dict[str, Any]) -> GenerationJob | None: ...
 
 
 class JobStore:
@@ -164,6 +177,47 @@ class JobStore:
                 return False
             return job.status in TERMINAL_STATUSES
 
+    def record_decision(
+        self, job_id: str, decision: dict[str, Any]
+    ) -> GenerationJob | None:
+        """Append an orchestrator decision to the audit trail.
+
+        `decision` should be a JSON-serializable dict, e.g.
+        `{"iteration": 2, "think": "...", "actions": [...], "questions": [...]}`.
+        """
+        with self._lock:
+            job = self._jobs.get(job_id)
+            if job is None:
+                return None
+            log = list(job.decision_log) + [decision]
+            job.decision_log = tuple(log)
+            if decision.get("think"):
+                job.last_thinking = decision["think"]
+            return job
+
+    def submit_answer(
+        self, job_id: str, answers: dict[str, str]
+    ) -> GenerationJob | None:
+        """Record human answers for a WAITING_FOR_INPUT job and resume it.
+
+        Returns the updated job, or None if the job isn't in
+        WAITING_FOR_INPUT state.
+        """
+        with self._lock:
+            job = self._jobs.get(job_id)
+            if job is None or job.status != JobStatus.WAITING_FOR_INPUT:
+                return None
+            merged = dict(job.human_answers)
+            merged.update(answers)
+            job.human_answers = merged
+            job.pending_questions = tuple(
+                q for q in job.pending_questions if q.get("id") not in answers
+            )
+            # If all questions answered, return to RUNNING so the runner resumes.
+            if not job.pending_questions:
+                job.status = JobStatus.RUNNING
+            return job
+
     def is_cancelled(self, job_id: str) -> bool:
         """Return True if the job has been cancelled (status=ABORTED)."""
         return self.is_terminal(job_id) and (
@@ -236,7 +290,11 @@ class SqliteJobStore:
         completed_at TEXT,
         termination_reason TEXT,
         result TEXT,
-        error TEXT
+        error TEXT,
+        pending_questions TEXT,
+        human_answers TEXT,
+        last_thinking TEXT,
+        decision_log TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
     """
@@ -247,6 +305,15 @@ class SqliteJobStore:
         os.makedirs(os.path.dirname(os.path.abspath(db_path)) or ".", exist_ok=True)
         with self._connect() as conn:
             conn.executescript(self.SCHEMA)
+            # Idempotent migrations for existing DBs (Sprint 10 + 11).
+            for col in (
+                "pending_questions", "human_answers", "last_thinking", "decision_log",
+            ):
+                try:
+                    conn.execute(f"ALTER TABLE jobs ADD COLUMN {col} TEXT")
+                    conn.commit()
+                except sqlite3.OperationalError:
+                    pass  # column already exists
             conn.commit()
 
     def _connect(self) -> sqlite3.Connection:
@@ -296,7 +363,8 @@ class SqliteJobStore:
     def update(self, job_id: str, **fields: Any) -> GenerationJob:
         valid_fields = {
             "status", "started_at", "completed_at", "termination_reason",
-            "result", "error",
+            "result", "error", "pending_questions", "human_answers",
+            "last_thinking", "decision_log",
         }
         sets = []
         values: list[Any] = []
@@ -307,6 +375,12 @@ class SqliteJobStore:
                 value = value.value if isinstance(value, JobStatus) else value
             if key == "result" and value is not None and not isinstance(value, (str, bytes)):
                 value = json.dumps(value, default=str)
+            if key == "pending_questions":
+                value = json.dumps(list(value), default=str)
+            if key == "human_answers":
+                value = json.dumps(dict(value), default=str)
+            if key == "decision_log":
+                value = json.dumps(list(value), default=str)
             sets.append(f"{key} = ?")
             values.append(value)
         if not sets:
@@ -339,6 +413,25 @@ class SqliteJobStore:
         job = self.get(job_id)
         return job is not None and job.status == JobStatus.ABORTED
 
+    def submit_answer(
+        self, job_id: str, answers: dict[str, str]
+    ) -> GenerationJob | None:
+        job = self.get(job_id)
+        if job is None or job.status != JobStatus.WAITING_FOR_INPUT:
+            return None
+        merged = dict(job.human_answers)
+        merged.update(answers)
+        new_pending = tuple(
+            q for q in job.pending_questions if q.get("id") not in answers
+        )
+        new_status = JobStatus.RUNNING if not new_pending else JobStatus.WAITING_FOR_INPUT
+        return self.update(
+            job_id,
+            human_answers=merged,
+            pending_questions=new_pending,
+            status=new_status,
+        )
+
     def cancel_event(self, job_id: str) -> threading.Event:
         """Polling-based event for SQLite (cross-process not supported).
 
@@ -350,10 +443,27 @@ class SqliteJobStore:
             event.set()
         return event
 
+    def record_decision(
+        self, job_id: str, decision: dict[str, Any]
+    ) -> GenerationJob | None:
+        job = self.get(job_id)
+        if job is None:
+            return None
+        log = list(job.decision_log) + [decision]
+        new_thinking = decision.get("think") or job.last_thinking
+        return self.update(
+            job_id,
+            decision_log=tuple(log),
+            last_thinking=new_thinking,
+        )
+
 
 def _row_to_job(row: sqlite3.Row) -> GenerationJob:
     payload = json.loads(row["request_payload"]) if row["request_payload"] else {}
     result = json.loads(row["result"]) if row["result"] else None
+    pending = tuple(json.loads(row["pending_questions"])) if row["pending_questions"] else ()
+    answers = json.loads(row["human_answers"]) if row["human_answers"] else {}
+    decision_log = tuple(json.loads(row["decision_log"])) if row["decision_log"] else ()
     return GenerationJob(
         job_id=row["job_id"],
         request_id=row["request_id"],
@@ -365,12 +475,38 @@ def _row_to_job(row: sqlite3.Row) -> GenerationJob:
         termination_reason=row["termination_reason"],
         result=result,
         error=row["error"],
+        pending_questions=pending,
+        human_answers=answers,
+        last_thinking=row["last_thinking"] or "",
+        decision_log=decision_log,
+    )
+
+
+def _default_store() -> JobStoreProtocol:
+    """Pick the default store based on environment.
+
+    Production: SQLite (jobs survive process restart).
+    Tests/development: in-memory (clean slate per process).
+
+    Override via env `COGENAI_JOB_STORE` (memory | sqlite:/path/to/db).
+    """
+    import os
+    override = os.environ.get("COGENAI_JOB_STORE", "").strip()
+    if override == "":
+        # Default: in-memory. Tests set their own; production can set the env var.
+        return JobStore()
+    if override.startswith("sqlite:"):
+        return SqliteJobStore(override[len("sqlite:"):])
+    if override == "memory":
+        return JobStore()
+    raise ValueError(
+        f"unknown COGENAI_JOB_STORE={override!r}; expected 'memory' or 'sqlite:<path>'"
     )
 
 
 # Module-level singleton (FastAPI dependency-friendly). Backed by in-memory
 # by default; can be swapped via `set_job_store()` for SQLite or tests.
-_store: JobStoreProtocol = JobStore()
+_store: JobStoreProtocol = _default_store()
 
 
 def get_job_store() -> JobStoreProtocol:
@@ -382,6 +518,12 @@ def set_job_store(store: JobStoreProtocol) -> None:
     """Replace the process-wide JobStore (used by tests and app bootstrap)."""
     global _store
     _store = store
+
+
+def reset_to_default_store() -> None:
+    """Rebuild the default store from environment (used by tests)."""
+    global _store
+    _store = _default_store()
 
 
 # ----------------------------- Event bus -----------------------------

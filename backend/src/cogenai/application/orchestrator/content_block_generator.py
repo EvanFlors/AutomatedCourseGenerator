@@ -19,7 +19,8 @@ class ContentBlockGeneratorInput:
     section_spec: SectionSpec
     adapted_section: AdaptedSection
     context: GenerationContext
-    block_types: tuple[str, ...] = field(default_factory=lambda: ("concept", "example", "exercise", "key_points", "quiz"))
+    # When None, the LLM picks block types from the full taxonomy.
+    block_types: tuple[str, ...] | None = None
 
 
 @dataclass
@@ -38,6 +39,21 @@ class ContentBlockGeneratorAgent(BaseAgent[ContentBlockGeneratorInput, Generated
         context = input_data.context
         block_types = input_data.block_types
 
+        if block_types is None:
+            count_clause = (
+                "Decide the number of blocks based on what the section needs "
+                "(typically 3-7 blocks)."
+            )
+            type_clause = (
+                "Choose block types from the full taxonomy: concept, example, "
+                "code, exercise, solution, challenge, quiz, key_points, "
+                "best_practices, common_mistakes, visual_explanation, analogy, "
+                "reference."
+            )
+        else:
+            count_clause = f"Generate exactly {len(block_types)} blocks."
+            type_clause = f"Block types (in order): {', '.join(block_types)}"
+
         user_prompt = f"""
             Generate detailed content blocks for this section:
 
@@ -47,7 +63,8 @@ class ContentBlockGeneratorAgent(BaseAgent[ContentBlockGeneratorInput, Generated
             Difficulty: {context.difficulty}
             Learning Outcomes: {', '.join(section_spec.learning_objectives)}
 
-            Generate {len(block_types)} blocks of these types: {', '.join(block_types)}
+            {count_clause}
+            {type_clause}
 
             Each block must be detailed and pedagogically sound.
 
@@ -66,7 +83,12 @@ class ContentBlockGeneratorAgent(BaseAgent[ContentBlockGeneratorInput, Generated
         return result
 
 
-    def _parse_blocks(self, response: str, block_types: tuple[str, ...], difficulty: str) -> list[ContentBlock]:
+    def _parse_blocks(
+        self,
+        response: str,
+        block_types: tuple[str, ...] | None,
+        difficulty: str,
+    ) -> list[ContentBlock]:
         match = re.search(r'\[.*\]', response, re.DOTALL)
         if not match:
             raise ValueError(f"No JSON array found in LLM response for {self.name}")
@@ -83,9 +105,17 @@ class ContentBlockGeneratorAgent(BaseAgent[ContentBlockGeneratorInput, Generated
         if not isinstance(data, list):
             raise ValueError(f"Expected JSON array for {self.name}")
 
+        # If the LLM was constrained to specific types, fall back to the
+        # i-th entry. Otherwise, the LLM is free to choose and should
+        # always emit the `type` field explicitly.
+        fallback_types = block_types if block_types is not None else ("concept",)
+
         blocks = []
         for idx, block_data in enumerate(data):
-            block_type = block_data.get("type", block_types[idx] if idx < len(block_types) else "concept")
+            block_type = block_data.get(
+                "type",
+                fallback_types[idx % len(fallback_types)] if fallback_types else "concept",
+            )
             content = block_data.get("content", {})
             blocks.append(ContentBlock(
                 id=new_block_id(),

@@ -19,7 +19,8 @@ class SectionAuthorInput:
     section_spec: SectionSpec
     context: GenerationContext
     skeleton: CourseSkeleton
-    block_types: tuple[str, ...] = field(default_factory=lambda: ("concept", "example", "exercise", "key_points", "quiz"))
+    # When None, the LLM picks block types from the full taxonomy.
+    block_types: tuple[str, ...] | None = None
 
 
 @dataclass
@@ -39,11 +40,21 @@ class SectionAuthorAgent(BaseAgent[SectionAuthorInput, SectionDraft]):
         context = input_data.context
         block_types = input_data.block_types
 
+        if block_types is None:
+            block_types_clause = (
+                "Choose the most appropriate block types from the full taxonomy: "
+                "concept, example, code, exercise, solution, challenge, quiz, "
+                "key_points, best_practices, common_mistakes, visual_explanation, "
+                "analogy, reference."
+            )
+        else:
+            block_types_clause = f"Block types (must use only these): {', '.join(block_types)}"
+
         user_prompt = f"""
             Generate content for: {section_spec.title}
             Topic: {section_spec.topic}
             Audience: {context.audience}, Difficulty: {context.difficulty}
-            Block types: {', '.join(block_types)}
+            {block_types_clause}
             Return a JSON array of blocks with type and content fields.
         """
 
@@ -58,7 +69,12 @@ class SectionAuthorAgent(BaseAgent[SectionAuthorInput, SectionDraft]):
         self._log_execution(input_data, draft)
         return draft
 
-    def _parse_blocks(self, response: str, block_types: tuple[str, ...], difficulty: str) -> list[ContentBlock]:
+    def _parse_blocks(
+        self,
+        response: str,
+        block_types: tuple[str, ...] | None,
+        difficulty: str,
+    ) -> list[ContentBlock]:
         match = re.search(r'\[.*\]', response, re.DOTALL)
         if not match:
             raise ValueError(f"No JSON array found in LLM response for {self.name}")
@@ -76,9 +92,17 @@ class SectionAuthorAgent(BaseAgent[SectionAuthorInput, SectionDraft]):
         if not isinstance(data, list):
             raise ValueError(f"Expected JSON array for {self.name}")
 
+        # If the LLM was constrained to specific types, default missing
+        # block-types to the i-th entry of that list. Otherwise default to
+        # "concept" — the LLM should have emitted the type explicitly.
+        fallback_types = block_types if block_types is not None else ("concept",)
+
         blocks = []
         for idx, block_data in enumerate(data):
-            block_type = block_data.get("type", block_types[idx] if idx < len(block_types) else "concept")
+            block_type = block_data.get(
+                "type",
+                fallback_types[idx % len(fallback_types)] if fallback_types else "concept",
+            )
             blocks.append(ContentBlock(
                 id=new_block_id(),
                 type=block_type,

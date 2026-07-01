@@ -399,19 +399,24 @@ def auto_feedback_decision(
     if prev is None or prev.evaluation_passed:
         return request
 
-    updates: dict[str, Any] = {
-        "num_modules": min(request.num_modules + 1, 5),
-        "sections_per_module": min(request.sections_per_module + 1, 3),
-    }
+    updates: dict[str, Any] = {}
+    # Only nudge counts if they were set; if LLM-chooses, leave alone.
+    if request.num_modules is not None:
+        updates["num_modules"] = min(request.num_modules + 1, 5)
+    if request.sections_per_module is not None:
+        updates["sections_per_module"] = min(request.sections_per_module + 1, 3)
 
-    additional_types = ["quiz", "key_points", "code", "summary", "check"]
-    block_types = list(request.block_types)
-    if len(block_types) < 5:
-        for bt in additional_types:
-            if bt not in block_types:
-                block_types.append(bt)
-                break
-    updates["block_types"] = tuple(block_types)
+    # Diversify block types only if user specified a list. When LLM-chooses
+    # block_types=None, the agents pick from the full taxonomy.
+    if request.block_types is not None:
+        additional_types = ["quiz", "key_points", "code", "summary", "check"]
+        block_types = list(request.block_types)
+        if len(block_types) < 5:
+            for bt in additional_types:
+                if bt not in block_types:
+                    block_types.append(bt)
+                    break
+        updates["block_types"] = tuple(block_types)
 
     new_outcomes = ["Functions", "Loops", "Data Structures", "Error Handling", "Best Practices"]
     outcomes = list(request.learning_outcomes)
@@ -421,6 +426,8 @@ def auto_feedback_decision(
             break
     updates["learning_outcomes"] = tuple(outcomes)
 
+    if not updates:
+        return request
     request = request.model_copy(update=updates)
     print(
         f"\nAuto-increasing: modules={request.num_modules}, "
